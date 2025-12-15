@@ -1,0 +1,39 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+out/
+*.ipr
+
+# Compiled class files
+*.class
+
+# Maven
+target/
+
+# Gradle
+.gradle/
+build/
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Eclipse (caso alguém use)
+.project
+.classpath
+.settings/
+
+# VS Code (caso alguém use)
+.vscode/
+
+# Arquivos temporários
+*.tmp
+*.swp
+*~
+
+# Arquivos de teste gerados
+test-output/
