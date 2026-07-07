@@ -81,7 +81,7 @@ public class McpDdlToEntityService {
                 .toList();
 
         return new DdlResponse(
-                "com.thadeu.massa_dados_core.entity." + className,
+                "com.thadeu.massa_dados_core.domain." + className,
                 entityCode,
                 tableName,
                 attributeInfos
@@ -177,7 +177,7 @@ public class McpDdlToEntityService {
 
     private String generateEntityCode(String className, String tableName, List<ColumnInfo> columns) {
         StringBuilder sb = new StringBuilder();
-        sb.append("package com.thadeu.massa_dados_core.entity;\n\n");
+        sb.append("package com.thadeu.massa_dados_core.domain;\n\n");
         sb.append("import jakarta.persistence.*;\n");
         sb.append("import lombok.*;\n\n");
         sb.append("@Entity\n");

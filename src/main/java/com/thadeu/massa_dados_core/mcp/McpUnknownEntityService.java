@@ -144,7 +144,7 @@ public class McpUnknownEntityService {
     private Set<String> getExistingFieldNames(String className) {
         // Tenta carregar a classe via reflection para obter os campos
         try {
-            Class<?> clazz = Class.forName("com.thadeu.massa_dados_core.entity." + className);
+            Class<?> clazz = Class.forName("com.thadeu.massa_dados_core.domain." + className);
             return java.util.Arrays.stream(clazz.getDeclaredFields())
                     .map(java.lang.reflect.Field::getName)
                     .collect(Collectors.toSet());
