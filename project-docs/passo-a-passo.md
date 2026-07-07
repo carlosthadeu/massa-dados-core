@@ -14,13 +14,19 @@ O segundo servidor:
 ```
 Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP)
-Servidor MCP (Spring Boot)
+Servidor MCP 1 — Configuração e DDL (Spring Boot)
+    ├── McpServerConfig (configuração do protocolo MCP)
+    ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities")
+    ├── McpDdlToEntityService (conversão de DDL para classes Entity)
+    ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
+    ├── McpCompileService (recompilação do Servidor 2)
+    └── dto/ (DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
+        ↓ (chamada interna para recompilar)
+Servidor MCP 2 — Metadados e Massa de Dados (Spring Boot)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
-    ├── McpDdlToEntityService (conversão de DDL para classes Entity)
-    ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
-    └── dto/ (EntityMetadataRequest, EntityMetadataResponse, DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
+    └── dto/ (EntityMetadataRequest, EntityMetadataResponse)
 ```
 
 ## ✅ Checklist
@@ -77,7 +83,8 @@ Servidor MCP (Spring Boot)
     - Nome da tabela
     - Colunas (nome, tipo, nullable, primary key, foreign key)
   - Gerar código Java da classe Entity correspondente (com anotações JPA)
-  - Salvar o arquivo no diretório `entity/` do projeto
+  - Salvar o arquivo no diretório `entity/` do Servidor 2
+  - Após salvar, chamar recompilação do Servidor 2 (via `McpCompileService`)
   - Atualizar o dicionário de metadados
 - [ ] 5.2 **Ferramenta `identify_unknown_entities`**:
   - Receber um script DDL
@@ -89,6 +96,13 @@ Servidor MCP (Spring Boot)
 - [ ] 5.3 **Integração entre ferramentas**:
   - Após `identify_unknown_entities`, o usuário pode chamar `ddl_to_entity` para gerar as classes faltantes
   - O dicionário deve ser atualizado automaticamente após cada geração
+- [ ] 5.4 **Recompilação do Servidor 2**:
+  - Criar `McpCompileService` no Servidor 1 que:
+    - Executa `mvn compile` no diretório do Servidor 2 (via `ProcessBuilder`)
+    - Ou chama um endpoint REST no Servidor 2 para recarregar classes (ex: `/actuator/restart`)
+    - Retorna sucesso/erro da compilação
+  - Integrar `McpCompileService` no fluxo de `ddl_to_entity`
+  - Garantir que o Servidor 2 esteja configurado para aceitar recarga (ex: Spring Boot DevTools ou actuator restart)
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
