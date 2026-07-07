@@ -1,4 +1,4 @@
-package com.thadeu.massa-dados-core;
+package com.thadeu.massa_dados_core;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
