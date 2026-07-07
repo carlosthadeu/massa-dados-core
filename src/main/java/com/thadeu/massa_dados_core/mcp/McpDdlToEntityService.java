@@ -35,84 +35,91 @@ public class McpDdlToEntityService {
     }
 
     /**
-     * Converte um script DDL em uma classe Entity e salva o arquivo.
+     * Converte um script DDL em classes Entity e salva os arquivos.
      *
      * @param request Dados do DDL
-     * @return Resposta com o código gerado
+     * @return Lista de respostas, uma para cada tabela processada
      */
-    public DdlResponse convertDdlToEntity(DdlRequest request) {
+    public List<DdlResponse> convertDdlToEntity(DdlRequest request) {
         String ddl = request.ddlScript();
 
-        // Extrair nome da tabela
-        String tableName = extractTableName(ddl);
-        if (tableName == null) {
-            throw new IllegalArgumentException("Não foi possível extrair o nome da tabela do DDL");
+        // Extrair todas as tabelas do DDL
+        List<TableDefinition> tables = extractAllTables(ddl);
+        if (tables.isEmpty()) {
+            throw new IllegalArgumentException("Nenhuma tabela encontrada no DDL");
         }
 
-        // Extrair colunas
-        List<ColumnInfo> columns = extractColumns(ddl);
+        List<DdlResponse> responses = new ArrayList<>();
 
-        // Gerar nome da classe (PascalCase a partir do nome da tabela)
-        String className = toPascalCase(tableName);
+        for (TableDefinition table : tables) {
+            String tableName = table.tableName();
+            List<ColumnInfo> columns = table.columns();
 
-        // Gerar código Java
-        String entityCode = generateEntityCode(className, tableName, columns);
+            // Gerar nome da classe (PascalCase a partir do nome da tabela)
+            String className = toPascalCase(tableName);
 
-        // Salvar arquivo
-        Path filePath = entityClassesPath.resolve(className + ".java");
-        try {
-            Files.createDirectories(entityClassesPath);
-            Files.writeString(filePath, entityCode);
-        } catch (IOException e) {
-            throw new RuntimeException("Erro ao salvar arquivo Entity: " + filePath, e);
+            // Gerar código Java
+            String entityCode = generateEntityCode(className, tableName, columns);
+
+            // Salvar arquivo
+            Path filePath = entityClassesPath.resolve(className + ".java");
+            try {
+                Files.createDirectories(entityClassesPath);
+                Files.writeString(filePath, entityCode);
+            } catch (IOException e) {
+                throw new RuntimeException("Erro ao salvar arquivo Entity: " + filePath, e);
+            }
+
+            // Montar resposta
+            List<AttributeInfo> attributeInfos = columns.stream()
+                    .map(col -> new AttributeInfo(
+                            col.name(),
+                            col.javaType(),
+                            col.nullable(),
+                            col.primaryKey(),
+                            col.columnName()))
+                    .toList();
+
+            responses.add(new DdlResponse(
+                    "com.thadeu.massa_dados_core.domain." + className,
+                    entityCode,
+                    tableName,
+                    attributeInfos
+            ));
         }
 
-        // Recompilar Servidor 2
+        // Recompilar Servidor 2 após processar todas as tabelas
         compileService.compile();
 
-        // Montar resposta
-        List<AttributeInfo> attributeInfos = columns.stream()
-                .map(col -> new AttributeInfo(
-                        col.name(),
-                        col.javaType(),
-                        col.nullable(),
-                        col.primaryKey(),
-                        col.columnName()))
-                .toList();
-
-        return new DdlResponse(
-                "com.thadeu.massa_dados_core.domain." + className,
-                entityCode,
-                tableName,
-                attributeInfos
-        );
+        return responses;
     }
 
-    // ========== Métodos auxiliares ==========
+    /**
+     * Extrai todas as definições de tabela de um script DDL.
+     */
+    private List<TableDefinition> extractAllTables(String ddl) {
+        List<TableDefinition> tables = new ArrayList<>();
 
-    private String extractTableName(String ddl) {
-        Pattern pattern = Pattern.compile(
-                "CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)",
-                Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(ddl);
-        if (matcher.find()) {
-            return matcher.group(1);
+        Pattern tablePattern = Pattern.compile(
+                "CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)\\s*\\(([^()]*(?:\\([^()]*\\)[^()]*)*)\\)",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+        Matcher matcher = tablePattern.matcher(ddl);
+
+        while (matcher.find()) {
+            String tableName = matcher.group(1);
+            String columnsBlock = matcher.group(2);
+            List<ColumnInfo> columns = extractColumnsFromBlock(columnsBlock);
+            tables.add(new TableDefinition(tableName, columns));
         }
-        return null;
+
+        return tables;
     }
 
-    private List<ColumnInfo> extractColumns(String ddl) {
+    /**
+     * Extrai colunas de um bloco de definição de colunas (entre parênteses).
+     */
+    private List<ColumnInfo> extractColumnsFromBlock(String columnsBlock) {
         List<ColumnInfo> columns = new ArrayList<>();
-
-        // Extrair o bloco entre parênteses que contém as colunas
-        Pattern blockPattern = Pattern.compile(
-                "\\(([^()]*(?:\\([^()]*\\)[^()]*)*)\\)",
-                Pattern.DOTALL);
-        Matcher blockMatcher = blockPattern.matcher(ddl);
-        if (!blockMatcher.find()) {
-            return columns;
-        }
-        String columnsBlock = blockMatcher.group(1);
 
         // Dividir por vírgulas, ignorando vírgulas dentro de parênteses
         String[] lines = columnsBlock.split("\\s*,\\s*(?![^()]*\\))");
@@ -150,6 +157,10 @@ public class McpDdlToEntityService {
 
         return columns;
     }
+
+    // ========== Métodos auxiliares ==========
+
+
 
     private String mapSqlTypeToJava(String sqlType) {
         if (sqlType.startsWith("INT") || sqlType.startsWith("SMALLINT")
@@ -248,5 +259,10 @@ public class McpDdlToEntityService {
             boolean nullable,
             boolean primaryKey,
             String columnName
+    ) {}
+
+    private record TableDefinition(
+            String tableName,
+            List<ColumnInfo> columns
     ) {}
 }

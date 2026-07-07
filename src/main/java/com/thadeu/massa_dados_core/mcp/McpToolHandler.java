@@ -9,6 +9,7 @@ import io.modelcontextprotocol.spec.McpServerSession;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 /**
@@ -77,9 +78,9 @@ public class McpToolHandler {
         return switch (toolName) {
             case "ddl_to_entity" -> {
                 String ddlScript = (String) arguments.get("ddlScript");
-                DdlResponse response = ddlToEntityService.convertDdlToEntity(
+                List<DdlResponse> responses = ddlToEntityService.convertDdlToEntity(
                         new DdlRequest(ddlScript));
-                yield response;
+                yield responses;
             }
             case "identify_unknown_entities" -> {
                 String ddlScript = (String) arguments.get("ddlScript");
