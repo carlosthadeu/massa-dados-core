@@ -1,11 +1,14 @@
 # 📋 Passo a Passo — Servidor MCP para Geração de Massa de Dados
 
 ## 🎯 Objetivo
-Criar um servidor MCP (Model Context Protocol) usando Spring Boot que:
-- Recebe uma entidade JPA (Spring Data) via ferramenta MCP
+Criar dois servidores MCP (Model Context Protocol) usando Spring Boot. O primeiro servidor:
+- Recebe uma configuração via application.properties informando onde estão as classes entities
+- Disponibiliza ao chat-mcp a funcionalidade de ao receber um script ddl, atualizar as classes entities do segundo servidor e recompilar;
+
+O segundo servidor:
 - Analisa a estrutura da entidade (reflection)
-- Retorna um dicionário de metadados: nome da classe, atributos, tipos, anotações JPA, etc.
-- Permite que o cliente MCP (ex: Continue) entenda a estrutura da entidade para gerar massa de dados
+- Retorna um dicionário de metadados: nome da classe, atributos, tipos, anotações JPA, etc. Que possam responder a uma série de perguntas com o vocabulário de negócio. O que não conseguir resolver, gerar uma demanda para um técnico vir configurar estes metadados e o sistema evoluir.
+- Permite que o cliente chat MCP receba comandos na linguagem do domínio da aplicação e crie a massa de dados. Exemplo: Crie um portfolio com duas ações estratégicas, ano do portfolio 2026, duas etapas em cada ação, com entregas nos meses setembro, outubro e desembro. Pelas entidades ele vai saber onde criar cada registro, mas para o usuário do chat (que é da área e negócio) vai só pedir a massa para a execução das homologações.
 
 ## 🧱 Arquitetura
 ```
@@ -13,7 +16,7 @@ Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP)
 Servidor MCP (Spring Boot)
     ├── McpServerConfig (configuração do protocolo MCP)
-    ├── McpToolHandler (ferramentas: "get_entity_metadata", "ddl_to_entity", "identify_unknown_entities")
+    ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
     ├── McpDdlToEntityService (conversão de DDL para classes Entity)
     ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
@@ -86,13 +89,6 @@ Servidor MCP (Spring Boot)
 - [ ] 5.3 **Integração entre ferramentas**:
   - Após `identify_unknown_entities`, o usuário pode chamar `ddl_to_entity` para gerar as classes faltantes
   - O dicionário deve ser atualizado automaticamente após cada geração
-- [ ] 5.4 **Ferramenta `get_entity_metadata`**:
-  - Receber o nome completo da classe (ex: `br.com.thadeu.massa-dados-core.entity.Cooperado`)
-  - Usar reflection para extrair:
-    - Nome da tabela (`@Table`)
-    - Atributos (nome, tipo Java, anotações JPA)
-    - Relacionamentos (`@ManyToOne`, `@OneToMany`, etc.)
-  - Retornar `EntityMetadataResponse` com todos os metadados
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
