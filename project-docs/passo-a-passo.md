@@ -79,24 +79,6 @@ src/main/java/com/thadeu/massa-dados-core/
 │   └── dto/
 │       ├── EntityMetadataRequest.java
 │       └── EntityMetadataResponse.java
-├── persist/
-│   ├── generic/
-│   │   ├── GenericDaoCommand.java
-│   │   ├── GenericDaoList.java
-│   │   ├── GenericDaoNamedQuery.java
-│   │   ├── GenericDaoPu.java
-│   │   ├── GenericDaoQueryParametros.java
-│   │   ├── GenericDaoUnico.java
-│   │   ├── GenericDaoUnmodifiableList.java
-│   │   └── factories/
-│   │       ├── DaoListFactory.java
-│   │       ├── DaoQueryFactory.java
-│   │       └── ParametrosDao.java
-│   └── interfaces/
-│       ├── DaoCommand.java
-│       ├── DaoList.java
-│       ├── DaoQuery.java
-│       └── DaoUnique.java
 └── resources/
     └── application.properties
 ```
