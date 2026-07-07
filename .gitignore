@@ -37,3 +37,4 @@ Thumbs.db
 
 # Arquivos de teste gerados
 test-output/
+.aider*
