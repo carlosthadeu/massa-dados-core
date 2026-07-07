@@ -13,7 +13,7 @@ Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP)
 Servidor MCP (Spring Boot)
     ├── McpServerConfig (configuração do protocolo MCP)
-    ├── McpToolHandler (ferramenta "get_entity_metadata")
+    ├── McpToolHandler (ferramentas: "get_entity_metadata", "ddl_to_entity", "identify_unknown_entities")
     ├── McpEntityMetadataService (lógica de reflection)
     ├── McpDdlToEntityService (conversão de DDL para classes Entity)
     ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
@@ -86,6 +86,13 @@ Servidor MCP (Spring Boot)
 - [ ] 5.3 **Integração entre ferramentas**:
   - Após `identify_unknown_entities`, o usuário pode chamar `ddl_to_entity` para gerar as classes faltantes
   - O dicionário deve ser atualizado automaticamente após cada geração
+- [ ] 5.4 **Ferramenta `get_entity_metadata`**:
+  - Receber o nome completo da classe (ex: `br.com.thadeu.massa-dados-core.entity.Cooperado`)
+  - Usar reflection para extrair:
+    - Nome da tabela (`@Table`)
+    - Atributos (nome, tipo Java, anotações JPA)
+    - Relacionamentos (`@ManyToOne`, `@OneToMany`, etc.)
+  - Retornar `EntityMetadataResponse` com todos os metadados
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
