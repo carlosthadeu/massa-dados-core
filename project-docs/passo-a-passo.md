@@ -15,7 +15,9 @@ Servidor MCP (Spring Boot)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
-    └── dto/ (EntityMetadataRequest, EntityMetadataResponse)
+    ├── McpDdlToEntityService (conversão de DDL para classes Entity)
+    ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
+    └── dto/ (EntityMetadataRequest, EntityMetadataResponse, DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
 ```
 
 ## ✅ Checklist
@@ -65,6 +67,26 @@ Servidor MCP (Spring Boot)
 - [ ] 4.2 Testar chamada da ferramenta `get_entity_metadata` pelo Continue
 - [ ] 4.3 Validar que o dicionário retornado permite gerar massa de dados
 
+### Fase 5 — Funcionalidades Avançadas
+- [ ] 5.1 **Ferramenta `ddl_to_entity`**:
+  - Receber um script DDL (CREATE TABLE, ALTER TABLE, etc.)
+  - Analisar sintaxe SQL e extrair:
+    - Nome da tabela
+    - Colunas (nome, tipo, nullable, primary key, foreign key)
+  - Gerar código Java da classe Entity correspondente (com anotações JPA)
+  - Salvar o arquivo no diretório `entity/` do projeto
+  - Atualizar o dicionário de metadados
+- [ ] 5.2 **Ferramenta `identify_unknown_entities`**:
+  - Receber um script DDL
+  - Comparar tabelas/colunas do DDL com as classes Entity existentes no projeto
+  - Identificar:
+    - Tabelas que não possuem classe Entity correspondente
+    - Colunas que não possuem atributo correspondente na Entity
+  - Retornar lista de itens não reconhecidos
+- [ ] 5.3 **Integração entre ferramentas**:
+  - Após `identify_unknown_entities`, o usuário pode chamar `ddl_to_entity` para gerar as classes faltantes
+  - O dicionário deve ser atualizado automaticamente após cada geração
+
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
 src/main/java/com/thadeu/massa-dados-core/
@@ -76,9 +98,15 @@ src/main/java/com/thadeu/massa-dados-core/
 │   ├── McpServerConfig.java
 │   ├── McpToolHandler.java
 │   ├── McpEntityMetadataService.java
+│   ├── McpDdlToEntityService.java
+│   ├── McpUnknownEntityService.java
 │   └── dto/
 │       ├── EntityMetadataRequest.java
-│       └── EntityMetadataResponse.java
+│       ├── EntityMetadataResponse.java
+│       ├── DdlRequest.java
+│       ├── DdlResponse.java
+│       ├── UnknownEntityRequest.java
+│       └── UnknownEntityResponse.java
 └── resources/
     └── application.properties
 ```
