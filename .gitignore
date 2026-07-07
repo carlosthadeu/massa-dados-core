@@ -38,3 +38,6 @@ Thumbs.db
 # Arquivos de teste gerados
 test-output/
 .aider*
+
+# Documentação do projeto (não deve ser versionada)
+project-docs/
