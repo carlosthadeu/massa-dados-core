@@ -14,15 +14,15 @@ O segundo servidor:
 ```
 Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP)
-Servidor MCP 1 — Configuração e DDL (Spring Boot)
+Servidor 1 — Configuração e DDL (Spring Boot, porta 8081)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities")
     ├── McpDdlToEntityService (conversão de DDL para classes Entity)
     ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
-    ├── McpCompileService (recompilação do Servidor 2)
+    ├── McpCompileService (recompilação do Servidor 2 via ProcessBuilder)
     └── dto/ (DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
         ↓ (chamada interna para recompilar)
-Servidor MCP 2 — Metadados e Massa de Dados (Spring Boot)
+Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
@@ -32,32 +32,59 @@ Servidor MCP 2 — Metadados e Massa de Dados (Spring Boot)
 ## ✅ Checklist
 
 ### Fase 1 — Configuração do Projeto
-- [ ] 1.1 Adicionar dependências no `pom.xml`:
+- [ ] 1.1 Criar dois projetos Maven separados na raiz:
+  - `servidor1-configuracao-ddl/` (porta 8081)
+  - `servidor2-metadados-massa/` (porta 8082)
+- [ ] 1.2 Cada projeto terá seu próprio `pom.xml` com dependências:
   - Spring Boot Starter Web
   - Spring Boot Starter Data JPA
   - Spring Boot Starter Validation
   - Lombok
-  - PostgreSQL Driver (runtime)
-  - Biblioteca MCP para Java (ex: `io.modelcontextprotocol:mcp-spring-boot-starter` ou implementação manual)
-- [ ] 1.2 Criar `application.properties` com:
-  - Porta do servidor (ex: 8080)
-  - Configuração do datasource (opcional, se quiser consultar banco real)
-- [ ] 1.3 Transformar `App.java` em `@SpringBootApplication`
-- [ ] 1.4 Verificar se o `.gitignore` ignora `project-docs/`
+  - H2 Database (runtime)
+  - Spring Boot Starter Test (test)
+  - **Não** usar `mcp-spring-boot-starter` (não existe no Maven Central)
+- [ ] 1.3 Cada projeto terá seu próprio `application.properties`:
+  - Porta do servidor (8081 para Servidor 1, 8082 para Servidor 2)
+  - Configuração do datasource H2
+  - Caminho das classes Entity (`entity.classes.path`)
+  - Caminho do projeto para recompilação (`entity.project.path`)
+- [ ] 1.4 Cada projeto terá seu próprio `App.java` com `@SpringBootApplication`
+- [ ] 1.5 Verificar se o `.gitignore` ignora `project-docs/`
 
-### Fase 2 — Implementação do Servidor MCP
-- [ ] 2.1 Criar pacote `mcp/` com:
-  - `McpServerConfig.java` — configuração do protocolo MCP (transporte HTTP, registro de ferramentas)
+### Fase 2 — Implementação dos Servidores MCP
+
+#### Servidor 1 — Configuração e DDL (porta 8081)
+- [ ] 2.1 Criar pacote `mcp/` no Servidor 1 com:
+  - `McpServerConfig.java` — configuração do protocolo MCP (endpoint `/mcp` com JSON-RPC)
+  - `McpToolHandler.java` — implementação das ferramentas `ddl_to_entity` e `identify_unknown_entities`
+  - `McpDdlToEntityService.java` — conversão de DDL para classes Entity
+  - `McpUnknownEntityService.java` — identificação de classes/atributos não reconhecidos
+  - `McpCompileService.java` — recompilação do Servidor 2 via `ProcessBuilder`
+- [ ] 2.2 Criar pacote `mcp/dto/` no Servidor 1 com:
+  - `DdlRequest.java` — record com campo `ddlScript` (String)
+  - `DdlResponse.java` — record com campos:
+    - `entityClassName` (String)
+    - `entityCode` (String)
+    - `tableName` (String)
+    - `attributes` (List<AttributeInfo>)
+  - `UnknownEntityRequest.java` — record com campo `ddlScript` (String)
+  - `UnknownEntityResponse.java` — record com campos:
+    - `missingTables` (List<String>)
+    - `missingColumns` (List<MissingColumnInfo>)
+
+#### Servidor 2 — Metadados e Massa de Dados (porta 8082)
+- [ ] 2.3 Criar pacote `mcp/` no Servidor 2 com:
+  - `McpServerConfig.java` — configuração do protocolo MCP (endpoint `/mcp` com JSON-RPC)
   - `McpToolHandler.java` — implementação da ferramenta `get_entity_metadata`
   - `McpEntityMetadataService.java` — serviço que usa reflection para extrair metadados
-- [ ] 2.2 Criar pacote `mcp/dto/` com:
+- [ ] 2.4 Criar pacote `mcp/dto/` no Servidor 2 com:
   - `EntityMetadataRequest.java` — record com campo `className` (String)
   - `EntityMetadataResponse.java` — record com campos:
     - `className` (String)
     - `tableName` (String, da anotação `@Table`)
     - `attributes` (List<AttributeInfo>)
     - `relationships` (List<RelationshipInfo>)
-- [ ] 2.3 Implementar `McpEntityMetadataService`:
+- [ ] 2.5 Implementar `McpEntityMetadataService`:
   - Carregar classe pelo nome (`Class.forName`)
   - Verificar se tem `@Entity`
   - Extrair `@Table(name)`
@@ -106,26 +133,45 @@ Servidor MCP 2 — Metadados e Massa de Dados (Spring Boot)
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
-src/main/java/com/thadeu/massa-dados-core/
-├── App.java                          (Spring Boot Application)
-├── config/
-│   ├── CucumberPicoFactory.java
-│   └── InjectPageFactory.java
-├── mcp/
-│   ├── McpServerConfig.java
-│   ├── McpToolHandler.java
-│   ├── McpEntityMetadataService.java
-│   ├── McpDdlToEntityService.java
-│   ├── McpUnknownEntityService.java
-│   └── dto/
-│       ├── EntityMetadataRequest.java
-│       ├── EntityMetadataResponse.java
-│       ├── DdlRequest.java
-│       ├── DdlResponse.java
-│       ├── UnknownEntityRequest.java
-│       └── UnknownEntityResponse.java
-└── resources/
-    └── application.properties
+raiz-do-repositorio/
+├── servidor1-configuracao-ddl/          (porta 8081)
+│   ├── pom.xml
+│   └── src/main/java/com/thadeu/massa_dados_core/
+│       ├── App.java
+│       ├── mcp/
+│       │   ├── McpServerConfig.java
+│       │   ├── McpToolHandler.java
+│       │   ├── McpDdlToEntityService.java
+│       │   ├── McpUnknownEntityService.java
+│       │   ├── McpCompileService.java
+│       │   └── dto/
+│       │       ├── DdlRequest.java
+│       │       ├── DdlResponse.java
+│       │       ├── UnknownEntityRequest.java
+│       │       └── UnknownEntityResponse.java
+│       └── resources/
+│           └── application.properties
+│
+├── servidor2-metadados-massa/           (porta 8082)
+│   ├── pom.xml
+│   └── src/main/java/com/thadeu/massa_dados_core/
+│       ├── App.java
+│       ├── mcp/
+│       │   ├── McpServerConfig.java
+│       │   ├── McpToolHandler.java
+│       │   ├── McpEntityMetadataService.java
+│       │   └── dto/
+│       │       ├── EntityMetadataRequest.java
+│       │       └── EntityMetadataResponse.java
+│       └── resources/
+│           └── application.properties
+│
+├── src/                                (projeto original, será removido)
+├── pom.xml                             (projeto original, será removido)
+├── README.md
+├── USAGE.md
+└── project-docs/
+    └── passo-a-passo.md
 ```
 
 ## 🔗 Referências
