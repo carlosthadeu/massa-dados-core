@@ -2,6 +2,8 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.thadeu.massa_dados_core.mcp.dto.DdlRequest;
 import com.thadeu.massa_dados_core.mcp.dto.DdlResponse;
+import com.thadeu.massa_dados_core.mcp.dto.EntityMetadataRequest;
+import com.thadeu.massa_dados_core.mcp.dto.EntityMetadataResponse;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityRequest;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityResponse;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -15,18 +17,22 @@ import java.util.function.BiFunction;
 /**
  * Manipulador das ferramentas MCP expostas pelo servidor.
  *
- * <p>Registra as ferramentas {@code ddl_to_entity} e {@code identify_unknown_entities}.
+ * <p>Registra as ferramentas {@code ddl_to_entity}, {@code identify_unknown_entities}
+ * e {@code get_entity_metadata}.
  */
 @Component
 public class McpToolHandler {
 
     private final McpDdlToEntityService ddlToEntityService;
     private final McpUnknownEntityService unknownEntityService;
+    private final McpEntityMetadataService entityMetadataService;
 
     public McpToolHandler(McpDdlToEntityService ddlToEntityService,
-                          McpUnknownEntityService unknownEntityService) {
+                          McpUnknownEntityService unknownEntityService,
+                          McpEntityMetadataService entityMetadataService) {
         this.ddlToEntityService = ddlToEntityService;
         this.unknownEntityService = unknownEntityService;
+        this.entityMetadataService = entityMetadataService;
     }
 
     /**
@@ -63,6 +69,20 @@ public class McpToolHandler {
                                 ),
                                 List.of("ddlScript")
                         )
+                ),
+                new McpSchema.Tool(
+                        "get_entity_metadata",
+                        "Obtém metadados de uma entidade JPA via reflection",
+                        new McpSchema.JsonSchema(
+                                "object",
+                                java.util.Map.of(
+                                        "className", new McpSchema.JsonSchema(
+                                                "string",
+                                                "Nome completo da classe (ex: com.thadeu.massa_dados_core.domain.Cliente)"
+                                        )
+                                ),
+                                List.of("className")
+                        )
                 )
         );
     }
@@ -86,6 +106,12 @@ public class McpToolHandler {
                 String ddlScript = (String) arguments.get("ddlScript");
                 UnknownEntityResponse response = unknownEntityService.identifyUnknownEntities(
                         new UnknownEntityRequest(ddlScript));
+                yield response;
+            }
+            case "get_entity_metadata" -> {
+                String className = (String) arguments.get("className");
+                EntityMetadataResponse response = entityMetadataService.getEntityMetadata(
+                        new EntityMetadataRequest(className));
                 yield response;
             }
             default -> throw new IllegalArgumentException("Ferramenta desconhecida: " + toolName);
