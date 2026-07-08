@@ -1,0 +1,139 @@
+{
+  "entidades": {
+    "acao_estrategica": {
+      "sinonimos": ["acao", "ação", "iniciativa", "projeto"],
+      "tabela": "T696ACES",
+      "classe": "br.gov.bnb.domain.entity.AcaoEstrategica",
+      "atributos": {
+        "situacao": {
+          "sinonimos": ["status", "estado", "fase"],
+          "coluna": "ST_ACO_ETT",
+          "mapeamento": {
+            "Proposta em Edição": {
+              "valor": 3,
+              "sinonimos": ["Em edição", "Editando", "Rascunho"]
+            },
+            "Ativo": { "valor": 2, "sinonimos": ["Ativa", "Vigente"] },
+            "Inativo": { "valor": 1, "sinonimos": ["Inativa", "Desativado"] },
+            "Proposta em Análise - Unidade": { "valor": 4, "sinonimos": ["Em análise unidade"] },
+            "Proposta Rejeitada pela Unidade": { "valor": 5, "sinonimos": ["Rejeitada unidade"] },
+            "Proposta em Planejamento": { "valor": 6, "sinonimos": ["Planejando"] },
+            "Proposta em Análise - Gestor de Unidade": { "valor": 7, "sinonimos": ["Em análise gestor"] },
+            "Proposta em Análise - Amb. de Planejamento": { "valor": 8, "sinonimos": ["Em análise planejamento"] },
+            "Proposta em Análise - Superintendência": { "valor": 9, "sinonimos": ["Em análise super"] },
+            "Proposta em Análise - Diretoria Executiva": { "valor": 10, "sinonimos": ["Em análise diretoria"] }
+          }
+        },
+        "portfolio": {
+          "coluna": "SQ_PTF_ACO",
+          "relacionamento": "Portfolio"
+        },
+        "origem": {
+          "coluna": "SQ_ORI_ACO",
+          "relacionamento": "OrigemAcaoEstrategica"
+        },
+        "unidade_operacional": {
+          "coluna": "CD_UND",
+          "relacionamento": "UnidadeOperacional"
+        },
+        "unidade_aprovacao": {
+          "coluna": "CD_UND_APR",
+          "relacionamento": "UnidadeOperacional"
+        },
+        "data_limite": {
+          "coluna": "DH_LIM",
+          "tipo": "LocalDate"
+        },
+        "nome": {
+          "coluna": "NM_ACO_ETT",
+          "tipo": "String"
+        },
+        "descricao": {
+          "coluna": "DE_ACO_ETT",
+          "tipo": "String"
+        }
+      },
+      "relacionamentos": {
+        "etapas": {
+          "tabela": "T696ETAC",
+          "classe": "br.gov.bnb.domain.entity.EtapaAcaoEstrategica",
+          "fk": "SQ_ACO_ETT"
+        },
+        "vinculacoes": {
+          "tabela": "T696VIAC",
+          "classe": "br.gov.bnb.domain.entity.VinculacaoAcaoEstrategica",
+          "fk": "SQ_ACO_ETT"
+        }
+      }
+    },
+    "portfolio": {
+      "sinonimos": ["portfólio", "carteira", "portifolio"],
+      "tabela": "T696POAC",
+      "classe": "br.gov.bnb.domain.entity.Portfolio",
+      "atributos": {
+        "nome": { "coluna": "NM_PTF", "tipo": "String" },
+        "ano_realizacao": { "coluna": "AA_REA", "tipo": "Integer" },
+        "situacao": {
+          "coluna": "ST_PTF_ACO",
+          "mapeamento": {
+            "Em Elaboração": { "valor": 1, "sinonimos": ["Elaborando", "Criando", "Em criação"] },
+            "Em Execução": { "valor": 2, "sinonimos": ["Executando", "Em andamento"] },
+            "Em Replanejamento": { "valor": 3, "sinonimos": ["Replanejando"] },
+            "Em Encerramento": { "valor": 4, "sinonimos": ["Encerrando"] },
+            "Encerrado": { "valor": 5, "sinonimos": ["Finalizado", "Concluído"] }
+          }
+        }
+      }
+    },
+    "etapa_acao_estrategica": {
+      "sinonimos": ["etapa", "fase", "passo", "estágio"],
+      "tabela": "T696ETAC",
+      "classe": "br.gov.bnb.domain.entity.EtapaAcaoEstrategica",
+      "atributos": {
+        "descricao": { "coluna": "DE_ETP_ACO", "tipo": "String" },
+        "entrega": { "coluna": "DE_ENT_ETP_ACO", "tipo": "String" },
+        "ano_realizacao": { "coluna": "AA_REA", "tipo": "Integer" },
+        "situacao": {
+          "coluna": "ST_ETP_ACO",
+          "mapeamento": {
+            "Não iniciada": { "valor": 1, "sinonimos": ["Pendente", "Aguardando", "Não começada"] },
+            "Em andamento": { "valor": 2, "sinonimos": ["Andamento", "Executando"] },
+            "Atrasada": { "valor": 3, "sinonimos": ["Em atraso"] },
+            "Não Concluída": { "valor": 4, "sinonimos": ["Incompleta"] },
+            "Concluída com Atraso": { "valor": 5, "sinonimos": ["Finalizada com atraso"] },
+            "Concluída": { "valor": 6, "sinonimos": ["Finalizada", "Completa"] }
+          }
+        }
+      },
+      "relacionamentos": {
+        "entregas": {
+          "tabela": "T696ENAC",
+          "classe": "br.gov.bnb.domain.entity.Entrega",
+          "fk": "SQ_ETP_ACO"
+        }
+      }
+    },
+    "entrega": {
+      "sinonimos": ["deliverable", "resultado", "produto"],
+      "tabela": "T696ENAC",
+      "classe": "br.gov.bnb.domain.entity.Entrega",
+      "atributos": {
+        "mes_vigencia": { "coluna": "MM_ENT", "tipo": "Integer" },
+        "planejamento": { "coluna": "PC_PLJ_ENT", "tipo": "BigDecimal" },
+        "realizado": { "coluna": "PC_REA_ENT", "tipo": "BigDecimal" },
+        "descricao_realizado": { "coluna": "DE_REA_ENT", "tipo": "String" },
+        "situacao": {
+          "coluna": "ST_ENT_ACO",
+          "mapeamento": {
+            "Não iniciada": { "valor": 1, "sinonimos": ["Pendente", "Aguardando"] },
+            "Em andamento": { "valor": 2, "sinonimos": ["Andamento", "Executando"] },
+            "Atrasada": { "valor": 3, "sinonimos": ["Em atraso"] },
+            "Não Concluída": { "valor": 4, "sinonimos": ["Incompleta"] },
+            "Concluída com Atraso": { "valor": 5, "sinonimos": ["Finalizada com atraso"] },
+            "Concluída": { "valor": 6, "sinonimos": ["Finalizada", "Completa"] }
+          }
+        }
+      }
+    }
+  }
+}

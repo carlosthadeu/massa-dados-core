@@ -1,0 +1,12 @@
+{
+  "verbos": {
+    "criar": ["gerar", "cadastrar", "inserir", "adicionar", "cria", "crie", "criar"],
+    "listar": ["consultar", "buscar", "pesquisar", "exibir", "mostrar"],
+    "atualizar": ["alterar", "modificar", "editar", "mudar"],
+    "excluir": ["remover", "deletar", "apagar", "cancelar"]
+  },
+  "conceitos": {
+    "massa_de_dados": ["dados de teste", "dados mock", "dados fictícios", "dados de homologação"],
+    "homologacao": ["teste", "validação", "prova", "QA"]
+  }
+}
