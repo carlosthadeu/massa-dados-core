@@ -2,8 +2,7 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thadeu.massa_dados_core.mcp.dto.EntityMetadataRequest;
-import com.thadeu.massa_dados_core.mcp.dto.EntityMetadataResponse;
+import com.thadeu.massa_dados_core.mcp.dto.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
@@ -16,13 +15,16 @@ public class McpToolHandler {
     private final ObjectMapper objectMapper;
     private final McpEntityMetadataService metadataService;
     private final McpMapeamentoSemanticoService mapeamentoSemanticoService;
+    private final McpConsultaService consultaService;
 
     public McpToolHandler(ObjectMapper objectMapper,
                           McpEntityMetadataService metadataService,
-                          McpMapeamentoSemanticoService mapeamentoSemanticoService) {
+                          McpMapeamentoSemanticoService mapeamentoSemanticoService,
+                          McpConsultaService consultaService) {
         this.objectMapper = objectMapper;
         this.metadataService = metadataService;
         this.mapeamentoSemanticoService = mapeamentoSemanticoService;
+        this.consultaService = consultaService;
     }
 
     public ServerResponse handle(ServerRequest request) {
@@ -49,6 +51,7 @@ public class McpToolHandler {
         return switch (toolName) {
             case "get_entity_metadata" -> handleGetEntityMetadata(arguments, id);
             case "get_mapeamento_semantico" -> handleGetMapeamentoSemantico(arguments, id);
+            case "consultar_dados" -> handleConsultarDados(arguments, id);
             default -> errorResponse(-32602, "Unknown tool: " + toolName, id);
         };
     }
@@ -75,6 +78,16 @@ public class McpToolHandler {
         }
     }
 
+    private ServerResponse handleConsultarDados(JsonNode arguments, JsonNode id) {
+        try {
+            ConsultaEstruturada consulta = objectMapper.treeToValue(arguments, ConsultaEstruturada.class);
+            ConsultaResponse response = consultaService.consultar(consulta);
+            return successResponse(response, id);
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error consulting data: " + e.getMessage(), id);
+        }
+    }
+
     private ServerResponse handleToolsList(JsonNode id) {
         var tools = java.util.List.of(
                 Map.of(
@@ -98,6 +111,55 @@ public class McpToolHandler {
                                 "type", "object",
                                 "properties", Map.of(),
                                 "required", java.util.List.of()
+                        )
+                ),
+                Map.of(
+                        "name", "consultar_dados",
+                        "description", "Executa uma consulta estruturada no banco de dados e retorna os resultados",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "comando", Map.of(
+                                                "type", "string",
+                                                "description", "Tipo de comando: 'consultar'"
+                                        ),
+                                        "entidade", Map.of(
+                                                "type", "string",
+                                                "description", "Nome da entidade no mapeamento semântico (ex: acao_estrategica, portfolio)"
+                                        ),
+                                        "filtros", Map.of(
+                                                "type", "array",
+                                                "description", "Lista de filtros",
+                                                "items", Map.of(
+                                                        "type", "object",
+                                                        "properties", Map.of(
+                                                                "atributo", Map.of("type", "string"),
+                                                                "operador", Map.of("type", "string"),
+                                                                "valor", Map.of("type", "string")
+                                                        )
+                                                )
+                                        ),
+                                        "agregacao", Map.of(
+                                                "type", "string",
+                                                "description", "Tipo de agregação: count, sum, avg, min, max"
+                                        ),
+                                        "atributoAgregacao", Map.of(
+                                                "type", "string",
+                                                "description", "Atributo para agregação"
+                                        ),
+                                        "ordenacao", Map.of(
+                                                "type", "object",
+                                                "properties", Map.of(
+                                                        "atributo", Map.of("type", "string"),
+                                                        "direcao", Map.of("type", "string")
+                                                )
+                                        ),
+                                        "limite", Map.of(
+                                                "type", "integer",
+                                                "description", "Limite de resultados"
+                                        )
+                                ),
+                                "required", java.util.List.of("comando", "entidade")
                         )
                 )
         );
