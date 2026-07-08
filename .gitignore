@@ -43,3 +43,12 @@ test-output/
 project-docs/
 .continue
 fix-service.ps1
+projeto-docs/mapas-classes.md
+pom.xml (raiz)
+.continue/config.json
+entities-core/src/main/java/domain/entity/EtapaAcaoEstrategica.java
+entities-core/src/main/java/domain/entity/GrupoUnidade.java
+entities-core/src/main/java/domain/entity/Indicador.java
+entities-core/src/main/java/domain/entity/NaturezaVariavel.java
+entities-core/src/main/java/domain/entity/OrientacaoEstrategica.java
+.continue/config.json
