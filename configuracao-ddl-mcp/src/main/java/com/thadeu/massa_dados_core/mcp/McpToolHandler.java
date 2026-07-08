@@ -12,6 +12,19 @@ import org.springframework.web.servlet.function.ServerResponse;
 
 import java.util.Map;
 
+/**
+ * Manipulador de requisições MCP para o servidor configuracao-ddl-mcp.
+ *
+ * <p>Responsabilidades:
+ * <ul>
+ *   <li>Receber requisições JSON-RPC no endpoint /mcp</li>
+ *   <li>Rotear para as ferramentas disponíveis (ddl_to_entity, identify_unknown_entities)</li>
+ *   <li>Retornar respostas padronizadas JSON-RPC</li>
+ * </ul>
+ *
+ * @author Thadeu Garrido
+ * @version 1.0
+ */
 @Component
 public class McpToolHandler {
 
@@ -19,6 +32,13 @@ public class McpToolHandler {
     private final McpDdlToEntityService ddlToEntityService;
     private final McpUnknownEntityService unknownEntityService;
 
+    /**
+     * Construtor com injeção de dependências.
+     *
+     * @param objectMapper          serializador JSON
+     * @param ddlToEntityService    serviço de conversão DDL para Entity
+     * @param unknownEntityService  serviço de identificação de entidades desconhecidas
+     */
     public McpToolHandler(ObjectMapper objectMapper,
                           McpDdlToEntityService ddlToEntityService,
                           McpUnknownEntityService unknownEntityService) {
@@ -27,6 +47,12 @@ public class McpToolHandler {
         this.unknownEntityService = unknownEntityService;
     }
 
+    /**
+     * Processa uma requisição HTTP para o endpoint MCP.
+     *
+     * @param request requisição HTTP contendo JSON-RPC
+     * @return resposta HTTP com resultado ou erro JSON-RPC
+     */
     public ServerResponse handle(ServerRequest request) {
         try {
             JsonNode body = objectMapper.readTree(request.servletRequest().getInputStream());
@@ -44,6 +70,13 @@ public class McpToolHandler {
         }
     }
 
+    /**
+     * Roteia uma chamada de ferramenta para o manipulador adequado.
+     *
+     * @param params parâmetros da chamada
+     * @param id     identificador da requisição JSON-RPC
+     * @return resposta da ferramenta
+     */
     private ServerResponse handleToolCall(JsonNode params, JsonNode id) {
         String toolName = params.has("name") ? params.get("name").asText() : "";
         JsonNode arguments = params.has("arguments") ? params.get("arguments") : objectMapper.nullNode();
@@ -55,6 +88,13 @@ public class McpToolHandler {
         };
     }
 
+    /**
+     * Manipula a ferramenta ddl_to_entity.
+     *
+     * @param arguments argumentos da ferramenta
+     * @param id        identificador da requisição
+     * @return resposta com a Entity gerada
+     */
     private ServerResponse handleDdlToEntity(JsonNode arguments, JsonNode id) {
         try {
             DdlRequest ddlRequest = objectMapper.treeToValue(arguments, DdlRequest.class);
@@ -65,6 +105,13 @@ public class McpToolHandler {
         }
     }
 
+    /**
+     * Manipula a ferramenta identify_unknown_entities.
+     *
+     * @param arguments argumentos da ferramenta
+     * @param id        identificador da requisição
+     * @return resposta com tabelas/colunas não reconhecidas
+     */
     private ServerResponse handleIdentifyUnknownEntities(JsonNode arguments, JsonNode id) {
         try {
             UnknownEntityRequest request = objectMapper.treeToValue(arguments, UnknownEntityRequest.class);
@@ -75,6 +122,12 @@ public class McpToolHandler {
         }
     }
 
+    /**
+     * Retorna a lista de ferramentas disponíveis.
+     *
+     * @param id identificador da requisição
+     * @return lista de ferramentas no formato JSON-RPC
+     */
     private ServerResponse handleToolsList(JsonNode id) {
         var tools = java.util.List.of(
                 Map.of(
@@ -111,6 +164,13 @@ public class McpToolHandler {
         return successResponse(result, id);
     }
 
+    /**
+     * Cria uma resposta de sucesso JSON-RPC.
+     *
+     * @param result objeto a ser serializado como resultado
+     * @param id     identificador da requisição
+     * @return resposta HTTP 200 com corpo JSON-RPC
+     */
     private ServerResponse successResponse(Object result, JsonNode id) {
         var body = Map.of(
                 "jsonrpc", "2.0",
@@ -120,6 +180,14 @@ public class McpToolHandler {
         return ServerResponse.ok().body(body);
     }
 
+    /**
+     * Cria uma resposta de erro JSON-RPC.
+     *
+     * @param code    código de erro
+     * @param message mensagem de erro
+     * @param id      identificador da requisição
+     * @return resposta HTTP 400 com corpo JSON-RPC de erro
+     */
     private ServerResponse errorResponse(int code, String message, JsonNode id) {
         var body = Map.of(
                 "jsonrpc", "2.0",
@@ -129,6 +197,12 @@ public class McpToolHandler {
         return ServerResponse.status(400).body(body);
     }
 
+    /**
+     * Serializa um objeto para JSON string.
+     *
+     * @param obj objeto a ser serializado
+     * @return string JSON
+     */
     private String toJsonString(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);

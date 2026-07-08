@@ -16,6 +16,20 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Serviço responsável por converter scripts DDL em classes Entity JPA.
+ *
+ * <p>Responsabilidades:
+ * <ul>
+ *   <li>Extrair nome da tabela e colunas de um script DDL</li>
+ *   <li>Gerar código Java da classe Entity com anotações JPA</li>
+ *   <li>Salvar o arquivo no diretório de entidades</li>
+ *   <li>Recompilar o projeto de entidades</li>
+ * </ul>
+ *
+ * @author Thadeu Garrido
+ * @version 1.0
+ */
 @Service
 public class McpDdlToEntityService {
 
@@ -27,10 +41,23 @@ public class McpDdlToEntityService {
 
     private final McpCompileService compileService;
 
+    /**
+     * Construtor com injeção do serviço de compilação.
+     *
+     * @param compileService serviço para recompilar o projeto após gerar a Entity
+     */
     public McpDdlToEntityService(McpCompileService compileService) {
         this.compileService = compileService;
     }
 
+    /**
+     * Processa um script DDL e gera a classe Entity correspondente.
+     *
+     * @param request requisição contendo o script DDL
+     * @return resposta com o nome da classe, código gerado e resultado da compilação
+     * @throws IOException se houver erro ao salvar o arquivo
+     * @throws IllegalArgumentException se o DDL não contiver uma instrução CREATE TABLE válida
+     */
     public DdlResponse processDdl(DdlRequest request) throws IOException {
         String ddl = request.ddlScript();
 
@@ -78,6 +105,12 @@ public class McpDdlToEntityService {
         return new DdlResponse(className, entityCode, tableName, attributes, compileResult.success(), compileResult.message());
     }
 
+    /**
+     * Extrai o nome da tabela de um script DDL.
+     *
+     * @param ddl script DDL
+     * @return nome da tabela ou null se não encontrado
+     */
     private String extractTableName(String ddl) {
         Pattern pattern = Pattern.compile("CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)",
                 Pattern.CASE_INSENSITIVE);
@@ -88,6 +121,12 @@ public class McpDdlToEntityService {
         return null;
     }
 
+    /**
+     * Extrai as colunas de um script DDL.
+     *
+     * @param ddl script DDL
+     * @return lista de informações das colunas
+     */
     private List<ColumnInfo> extractColumns(String ddl) {
         List<ColumnInfo> columns = new ArrayList<>();
         // Extrair bloco entre parênteses
@@ -120,6 +159,14 @@ public class McpDdlToEntityService {
         return columns;
     }
 
+    /**
+     * Gera o código Java da classe Entity.
+     *
+     * @param className nome da classe
+     * @param tableName nome da tabela
+     * @param columns   lista de colunas
+     * @return código Java completo da Entity
+     */
     private String generateEntityCode(String className, String tableName, List<ColumnInfo> columns) {
         StringBuilder sb = new StringBuilder();
         sb.append("package br.gov.bnb.domain.entity;\n\n");
@@ -168,6 +215,12 @@ public class McpDdlToEntityService {
         return sb.toString();
     }
 
+    /**
+     * Converte um nome de tabela (snake_case) para PascalCase.
+     *
+     * @param tableName nome da tabela
+     * @return nome em PascalCase
+     */
     private String toPascalCase(String tableName) {
         // Remove prefixo T696 e sufixo
         String name = tableName;
@@ -190,12 +243,24 @@ public class McpDdlToEntityService {
         return sb.toString();
     }
 
+    /**
+     * Converte um nome de coluna (snake_case) para camelCase.
+     *
+     * @param columnName nome da coluna
+     * @return nome em camelCase
+     */
     private String toCamelCase(String columnName) {
         String pascal = toPascalCase(columnName);
         if (pascal.isEmpty()) return "";
         return Character.toLowerCase(pascal.charAt(0)) + pascal.substring(1);
     }
 
+    /**
+     * Mapeia um tipo SQL para o tipo Java correspondente.
+     *
+     * @param sqlType tipo SQL
+     * @return tipo Java
+     */
     private String mapSqlTypeToJava(String sqlType) {
         return switch (sqlType) {
             case "INT", "INTEGER", "SMALLINT", "BIGINT" -> "Long";
@@ -207,5 +272,13 @@ public class McpDdlToEntityService {
         };
     }
 
+    /**
+     * Registro interno para informações de coluna.
+     *
+     * @param name       nome da coluna
+     * @param type       tipo SQL
+     * @param nullable   se permite nulo
+     * @param primaryKey se é chave primária
+     */
     record ColumnInfo(String name, String type, boolean nullable, boolean primaryKey) {}
 }
