@@ -1,11 +1,11 @@
 # 📋 Passo a Passo — Servidor MCP para Geração de Massa de Dados
 
 ## 🎯 Objetivo
-Criar dois servidores MCP (Model Context Protocol) usando Spring Boot. O primeiro servidor:
+Criar dois servidores MCP (Model Context Protocol) usando Spring Boot. O primeiro servidor (configuracao-ddl-mcp):
 - Recebe uma configuração via application.properties informando onde estão as classes entities
 - Disponibiliza ao chat-mcp a funcionalidade de ao receber um script ddl, atualizar as classes entities do segundo servidor e recompilar;
 
-O segundo servidor:
+O segundo servidor (metadados-massa-mcp):
 - Analisa a estrutura da entidade (reflection)
 - Retorna um dicionário de metadados: nome da classe, atributos, tipos, anotações JPA, etc. Que possam responder a uma série de perguntas com o vocabulário de negócio. O que não conseguir resolver, gerar uma demanda para um técnico vir configurar estes metadados e o sistema evoluir.
 - Permite que o cliente chat MCP receba comandos na linguagem do domínio da aplicação e crie a massa de dados. Exemplo: Crie um portfolio com duas ações estratégicas, ano do portfolio 2026, duas etapas em cada ação, com entregas nos meses setembro, outubro e desembro. Pelas entidades ele vai saber onde criar cada registro, mas para o usuário do chat (que é da área e negócio) vai só pedir a massa para a execução das homologações.
@@ -14,7 +14,7 @@ O segundo servidor:
 ```
 Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP)
-Servidor 1 — Configuração e DDL (Spring Boot, porta 8081)
+configuracao-ddl-mcp — Configuração e DDL (Spring Boot, porta 8081)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities")
     ├── McpDdlToEntityService (conversão de DDL para classes Entity)
@@ -22,7 +22,7 @@ Servidor 1 — Configuração e DDL (Spring Boot, porta 8081)
     ├── McpCompileService (recompilação do Servidor 2 via ProcessBuilder)
     └── dto/ (DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
         ↓ (chamada interna para recompilar)
-Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
+metadados-massa-mcp — Metadados e Massa de Dados (Spring Boot, porta 8082)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
@@ -33,8 +33,8 @@ Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
 
 ### Fase 1 — Configuração do Projeto
 - [ ] 1.1 Criar dois projetos Maven separados na raiz:
-  - `servidor1-configuracao-ddl/` (porta 8081)
-  - `servidor2-metadados-massa/` (porta 8082)
+  - `configuracao-ddl-mcp/` (porta 8081)
+  - `metadados-massa-mcp/` (porta 8082)
 - [ ] 1.2 Cada projeto terá seu próprio `pom.xml` com dependências:
   - Spring Boot Starter Web
   - Spring Boot Starter Data JPA
@@ -53,7 +53,7 @@ Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
 
 ### Fase 2 — Implementação dos Servidores MCP
 
-#### Servidor 1 — Configuração e DDL (porta 8081)
+#### configuracao-ddl-mcp — Configuração e DDL (porta 8081)
 - [ ] 2.1 Criar pacote `mcp/` no Servidor 1 com:
   - `McpServerConfig.java` — configuração do protocolo MCP (endpoint `/mcp` com JSON-RPC)
   - `McpToolHandler.java` — implementação das ferramentas `ddl_to_entity` e `identify_unknown_entities`
@@ -72,7 +72,7 @@ Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
     - `missingTables` (List<String>)
     - `missingColumns` (List<MissingColumnInfo>)
 
-#### Servidor 2 — Metadados e Massa de Dados (porta 8082)
+#### metadados-massa-mcp — Metadados e Massa de Dados (porta 8082)
 - [ ] 2.3 Criar pacote `mcp/` no Servidor 2 com:
   - `McpServerConfig.java` — configuração do protocolo MCP (endpoint `/mcp` com JSON-RPC)
   - `McpToolHandler.java` — implementação da ferramenta `get_entity_metadata`
@@ -94,8 +94,12 @@ Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
   - Retornar `EntityMetadataResponse`
 
 ### Fase 3 — Testes
-- [ ] 3.1 Testar com uma entidade concreta (ex: `Cooperado` da biblioteca `pessoa-core`)
-- [ ] 3.2 Verificar resposta JSON no formato esperado pelo MCP
+- [ ] 3.1 Testar com as entidades em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao
+      3.1.1 Criar um package que seja compartilhado entre os dois servidores mcp
+        3.1.1.1 O configuracao-ddl-mcp irá fazer a atualização entre o ddl e as entities
+        3.1.1.2 O metadados-massa-mcp irá utilizar estas classes para acessar a base de dados para CRUD, de acordo com o solicitado através do chat-mcp
+        3.1.1.3 As entities contidas em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao não devem ser corrigidas pelo aider. Somente pelo configuracao-ddl-mcp
+- [ ] 3.2 Verificar respostas no chat-mcp com os dois servidores configurados
 - [ ] 3.3 Testar erro para classe inexistente ou sem `@Entity`
 
 ### Fase 4 — Integração com Continue
@@ -134,7 +138,7 @@ Servidor 2 — Metadados e Massa de Dados (Spring Boot, porta 8082)
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
 raiz-do-repositorio/
-├── servidor1-configuracao-ddl/          (porta 8081)
+├── configuracao-ddl-mcp/          (porta 8081)
 │   ├── pom.xml
 │   └── src/main/java/com/thadeu/massa_dados_core/
 │       ├── App.java
@@ -152,7 +156,7 @@ raiz-do-repositorio/
 │       └── resources/
 │           └── application.properties
 │
-├── servidor2-metadados-massa/           (porta 8082)
+├── metadados-massa-mcp/           (porta 8082)
 │   ├── pom.xml
 │   └── src/main/java/com/thadeu/massa_dados_core/
 │       ├── App.java
