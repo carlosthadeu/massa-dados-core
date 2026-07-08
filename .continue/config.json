@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "configuracao-ddl-mcp": {
+      "type": "http",
+      "url": "http://localhost:8081/mcp",
+      "description": "Servidor MCP para conversão de DDL em entidades JPA e identificação de entidades desconhecidas"
+    },
+    "metadados-massa-mcp": {
+      "type": "http",
+      "url": "http://localhost:8082/mcp",
+      "description": "Servidor MCP para metadados de entidades JPA e geração de massa de dados"
+    }
+  }
+}
