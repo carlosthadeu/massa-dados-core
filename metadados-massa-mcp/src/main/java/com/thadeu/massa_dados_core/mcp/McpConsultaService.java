@@ -21,13 +21,28 @@ public class McpConsultaService {
         this.mapeamentoSemanticoService = mapeamentoSemanticoService;
     }
 
+    private final McpDemandaService demandaService;
+
+    public McpConsultaService(McpMapeamentoSemanticoService mapeamentoSemanticoService,
+                               McpDemandaService demandaService) {
+        this.mapeamentoSemanticoService = mapeamentoSemanticoService;
+        this.demandaService = demandaService;
+    }
+
     public ConsultaResponse consultar(ConsultaEstruturada consulta) {
         try {
             // 1. Obter a classe Entity correspondente à entidade
             Class<?> entityClass = getEntityClass(consulta.entidade());
             if (entityClass == null) {
-                return new ConsultaResponse(
+                // Gerar demanda automaticamente
+                demandaService.gerarDemanda(
+                        "Consulta para entidade '" + consulta.entidade() + "'",
                         "Entidade '" + consulta.entidade() + "' não encontrada no mapeamento semântico.",
+                        "Adicionar mapeamento para '" + consulta.entidade() + "' no mapeamento-semantico.json ou criar classe Entity via ddl_to_entity",
+                        "Consulta completa: " + consulta.toString()
+                );
+                return new ConsultaResponse(
+                        "Entidade '" + consulta.entidade() + "' não encontrada no mapeamento semântico. Uma demanda foi gerada para o técnico.",
                         List.of(),
                         null
                 );
@@ -44,8 +59,15 @@ public class McpConsultaService {
                 for (Filtro filtro : consulta.filtros()) {
                     Path<?> path = getPath(root, filtro.atributo());
                     if (path == null) {
-                        return new ConsultaResponse(
+                        // Gerar demanda automaticamente
+                        demandaService.gerarDemanda(
+                                "Consulta com atributo '" + filtro.atributo() + "' na entidade '" + consulta.entidade() + "'",
                                 "Atributo '" + filtro.atributo() + "' não encontrado na entidade '" + consulta.entidade() + "'.",
+                                "Adicionar atributo '" + filtro.atributo() + "' no mapeamento-semantico.json para a entidade '" + consulta.entidade() + "'",
+                                "Filtro completo: " + filtro.toString()
+                        );
+                        return new ConsultaResponse(
+                                "Atributo '" + filtro.atributo() + "' não encontrado na entidade '" + consulta.entidade() + "'. Uma demanda foi gerada para o técnico.",
                                 List.of(),
                                 null
                         );
@@ -63,8 +85,15 @@ public class McpConsultaService {
             if (consulta.agregacao() != null && !consulta.agregacao().isEmpty()) {
                 Path<?> atributoAgregacao = getPath(root, consulta.atributoAgregacao());
                 if (atributoAgregacao == null) {
-                    return new ConsultaResponse(
+                    // Gerar demanda automaticamente
+                    demandaService.gerarDemanda(
+                            "Consulta com agregação no atributo '" + consulta.atributoAgregacao() + "' na entidade '" + consulta.entidade() + "'",
                             "Atributo de agregação '" + consulta.atributoAgregacao() + "' não encontrado.",
+                            "Adicionar atributo '" + consulta.atributoAgregacao() + "' no mapeamento-semantico.json para a entidade '" + consulta.entidade() + "'",
+                            "Consulta completa: " + consulta.toString()
+                    );
+                    return new ConsultaResponse(
+                            "Atributo de agregação '" + consulta.atributoAgregacao() + "' não encontrado. Uma demanda foi gerada para o técnico.",
                             List.of(),
                             null
                     );
