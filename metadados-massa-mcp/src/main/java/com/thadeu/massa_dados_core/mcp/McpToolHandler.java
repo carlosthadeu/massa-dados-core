@@ -58,6 +58,7 @@ public class McpToolHandler {
             case "listar_demandas" -> handleListarDemandas(arguments, id);
             case "resolver_demanda" -> handleResolverDemanda(arguments, id);
             case "detalhar_demanda" -> handleDetalharDemanda(arguments, id);
+            case "criar_massa" -> handleCriarMassa(arguments, id);
             default -> errorResponse(-32602, "Unknown tool: " + toolName, id);
         };
     }
@@ -135,6 +136,139 @@ public class McpToolHandler {
         } catch (Exception e) {
             return errorResponse(-32603, "Error detailing demand: " + e.getMessage(), id);
         }
+    }
+
+    private ServerResponse handleCriarMassa(JsonNode arguments, JsonNode id) {
+        try {
+            // Recebe JSON de criação de massa
+            JsonNode entidades = arguments.get("entidades");
+            if (entidades == null || !entidades.isArray()) {
+                return errorResponse(-32602, "Parâmetro 'entidades' é obrigatório e deve ser um array", id);
+            }
+
+            // Para cada entidade, criar via JPA
+            List<Map<String, Object>> resultados = new java.util.ArrayList<>();
+            for (JsonNode entidade : entidades) {
+                String tipo = entidade.has("tipo") ? entidade.get("tipo").asText() : "";
+                JsonNode dados = entidade.has("dados") ? entidade.get("dados") : objectMapper.nullNode();
+                JsonNode filhos = entidade.has("filhos") ? entidade.get("filhos") : objectMapper.nullNode();
+
+                // Obter classe Entity correspondente
+                var mapeamento = mapeamentoSemanticoService.getMapeamentoSemantico();
+                var entidadesMap = mapeamento.get("entidades");
+                if (entidadesMap == null || !entidadesMap.has(tipo)) {
+                    demandaService.gerarDemanda(
+                            "Criação de massa para entidade '" + tipo + "'",
+                            "Entidade '" + tipo + "' não encontrada no mapeamento semântico.",
+                            "Adicionar mapeamento para '" + tipo + "' no mapeamento-semantico.json",
+                            "Dados recebidos: " + dados.toString()
+                    );
+                    resultados.add(Map.of(
+                            "tipo", tipo,
+                            "status", "erro",
+                            "mensagem", "Entidade não mapeada. Demanda gerada."
+                    ));
+                    continue;
+                }
+
+                String className = entidadesMap.get(tipo).get("classe").asText();
+                Class<?> entityClass;
+                try {
+                    entityClass = Class.forName(className);
+                } catch (ClassNotFoundException e) {
+                    resultados.add(Map.of(
+                            "tipo", tipo,
+                            "status", "erro",
+                            "mensagem", "Classe não encontrada: " + className
+                    ));
+                    continue;
+                }
+
+                // Criar instância via reflection
+                Object entity = entityClass.getDeclaredConstructor().newInstance();
+
+                // Preencher atributos
+                var atributos = entidadesMap.get(tipo).get("atributos");
+                if (atributos != null && dados != null) {
+                    for (var attr : dados.properties()) {
+                        String attrName = attr.getKey();
+                        JsonNode attrValue = attr.getValue();
+
+                        if (atributos.has(attrName)) {
+                            var attrDef = atributos.get(attrName);
+                            String coluna = attrDef.has("coluna") ? attrDef.get("coluna").asText() : "";
+                            String relacionamento = attrDef.has("relacionamento") ? attrDef.get("relacionamento").asText() : "";
+
+                            if (!relacionamento.isEmpty()) {
+                                // É um relacionamento - precisa buscar a entidade referenciada
+                                // Por simplicidade, ignoramos por enquanto
+                                continue;
+                            }
+
+                            // Encontrar campo na classe
+                            try {
+                                java.lang.reflect.Field field = entityClass.getDeclaredField(attrName);
+                                field.setAccessible(true);
+
+                                // Converter valor
+                                Object valor = converterValorParaCampo(field, attrValue);
+                                field.set(entity, valor);
+                            } catch (NoSuchFieldException e) {
+                                // Tentar pelo nome da coluna
+                                for (java.lang.reflect.Field f : entityClass.getDeclaredFields()) {
+                                    if (f.isAnnotationPresent(jakarta.persistence.Column.class)) {
+                                        jakarta.persistence.Column col = f.getAnnotation(jakarta.persistence.Column.class);
+                                        if (col.name().equals(coluna)) {
+                                            f.setAccessible(true);
+                                            Object valor = converterValorParaCampo(f, attrValue);
+                                            f.set(entity, valor);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Persistir via EntityManager
+                entityManager.persist(entity);
+
+                resultados.add(Map.of(
+                        "tipo", tipo,
+                        "status", "sucesso",
+                        "id", Map.of("id", java.util.Optional.ofNullable(
+                                entity.getClass().getMethod("getSq_aco_ett").invoke(entity)
+                        ).orElse(""))
+                ));
+            }
+
+            return successResponse(Map.of("resultados", resultados), id);
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error creating mass data: " + e.getMessage(), id);
+        }
+    }
+
+    private Object converterValorParaCampo(java.lang.reflect.Field field, JsonNode value) {
+        Class<?> type = field.getType();
+        if (type == String.class) {
+            return value.asText();
+        } else if (type == Integer.class || type == int.class) {
+            return value.asInt();
+        } else if (type == Long.class || type == long.class) {
+            return value.asLong();
+        } else if (type == Double.class || type == double.class) {
+            return value.asDouble();
+        } else if (type == Boolean.class || type == boolean.class) {
+            return value.asBoolean();
+        } else if (type == java.math.BigDecimal.class) {
+            return java.math.BigDecimal.valueOf(value.asDouble());
+        } else if (type == java.time.LocalDate.class) {
+            return java.time.LocalDate.parse(value.asText());
+        } else if (type == java.time.LocalDateTime.class) {
+            return java.time.LocalDateTime.parse(value.asText());
+        }
+        return value.asText();
     }
 
     private ServerResponse handleToolsList(JsonNode id) {
@@ -246,6 +380,28 @@ public class McpToolHandler {
                                         )
                                 ),
                                 "required", java.util.List.of("id")
+                        )
+                ),
+                Map.of(
+                        "name", "criar_massa",
+                        "description", "Cria massa de dados no banco a partir de um JSON estruturado com entidades, atributos e relacionamentos",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "entidades", Map.of(
+                                                "type", "array",
+                                                "description", "Lista de entidades a serem criadas",
+                                                "items", Map.of(
+                                                        "type", "object",
+                                                        "properties", Map.of(
+                                                                "tipo", Map.of("type", "string", "description", "Tipo da entidade (ex: portfolio, acao_estrategica)"),
+                                                                "dados", Map.of("type", "object", "description", "Atributos da entidade"),
+                                                                "filhos", Map.of("type", "array", "description", "Entidades filhas (ex: etapas dentro de ação)")
+                                                        )
+                                                )
+                                        )
+                                ),
+                                "required", java.util.List.of("entidades")
                         )
                 )
         );
