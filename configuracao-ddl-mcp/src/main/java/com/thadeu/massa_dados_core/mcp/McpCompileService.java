@@ -10,15 +10,15 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class McpCompileService {
 
-    @Value("${entity.project.path}")
-    private String projectPath;
+    @Value("${entity.core.project.path}")
+    private String coreProjectPath;
 
     public CompileResult compile() {
         try {
             ProcessBuilder pb = new ProcessBuilder(
                     "mvn.cmd", "compile", "-q"
             );
-            pb.directory(new File(projectPath));
+            pb.directory(new File(coreProjectPath));
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
