@@ -252,6 +252,19 @@ public class GlobalExceptionHandler {
 - [ ] 4.5.4 O LLM (Continue) usa os JSONs para interpretar comandos em linguagem natural e gerar JSON estruturado de criação de massa
 - [ ] 4.5.5 O Servidor 2 recebe o JSON estruturado e persiste os dados via JPA
 
+### Fase 4.6 — Aprimoramento Contínuo (Geração de Demandas)
+- [ ] 4.6.1 Quando o Servidor 2 não conseguir responder uma pergunta ou executar um comando, ele deve gerar automaticamente um arquivo `.md` na pasta `demandas/` com:
+  - Data/hora da solicitação
+  - Descrição do que foi solicitado (texto original do usuário)
+  - Motivo da falha (ex: "Entidade 'forum' não mapeada", "Atributo 'data_inicio' não encontrado", "Relacionamento entre X e Y não configurado")
+  - Sugestão de ação para o técnico (ex: "Adicionar mapeamento para T696FORU no mapeamento-semantico.json", "Criar classe Entity para T696FORU via ddl_to_entity")
+  - Stack trace ou detalhes técnicos relevantes
+- [ ] 4.6.2 Criar endpoint `/demandas` no Servidor 2 que lista as demandas pendentes
+- [ ] 4.6.3 Criar ferramenta MCP `listar_demandas` que retorna as demandas pendentes para o chat-mcp
+- [ ] 4.6.4 O técnico pode consultar as demandas via chat-mcp ou diretamente no endpoint REST
+- [ ] 4.6.5 Após o técnico resolver a demanda (ex: adicionar mapeamento, criar Entity), ele marca a demanda como resolvida via ferramenta MCP `resolver_demanda` ou editando o arquivo `.md`
+- [ ] 4.6.6 O sistema deve manter um histórico de demandas resolvidas para referência futura
+
 ### Fase 5 — Funcionalidades Avançadas
 - [ ] 5.1 **Ferramenta `ddl_to_entity`**:
   - Receber um script DDL (CREATE TABLE, ALTER TABLE, etc.)
@@ -595,6 +608,93 @@ raiz-do-repositorio/
 - ✅ **Sinônimos explícitos:** Reduz ambiguidades sem depender 100% do LLM
 - ✅ **Evolução:** Adicionar novas entidades = adicionar novo bloco no JSON
 - ✅ **Custo-benefício:** Não requer infraestrutura adicional (grafos, vetores)
+
+### Estratégia de Aprimoramento Contínuo
+
+**Objetivo:** Quando o servidor não conseguir responder uma pergunta ou executar um comando, gerar automaticamente uma demanda para o técnico, permitindo que o sistema evolua de forma orgânica.
+
+**Fluxo de Aprimoramento:**
+
+```
+Usuário faz pergunta/comando
+    ↓
+Servidor 2 tenta processar
+    ↓
+Consegue? ── Sim ──→ Retorna resposta
+    ↓
+   Não
+    ↓
+Gera arquivo de demanda (.md)
+    ↓
+Técnico consulta demandas via chat-mcp ou endpoint
+    ↓
+Técnico resolve (adiciona mapeamento, cria Entity, etc.)
+    ↓
+Marca demanda como resolvida
+    ↓
+Sistema evoluiu — próxima solicitação similar funcionará
+```
+
+**Exemplo de arquivo de demanda gerado:**
+
+```markdown
+# Demanda: 2026-07-08 14:30
+
+## Solicitação do usuário
+"Crie um fórum com pauta sobre sustentabilidade"
+
+## Motivo da falha
+Entidade 'forum' não encontrada no mapeamento semântico.
+Tabela T696FORU existe no banco de dados mas não possui classe Entity nem mapeamento.
+
+## Sugestão de ação
+1. Executar ferramenta `ddl_to_entity` com o DDL da tabela T696FORU para gerar a classe Entity
+2. Adicionar mapeamento para 'forum' no `mapeamento-semantico.json`
+3. Adicionar sinônimos para 'forum' no `sinonimos.json`
+
+## Detalhes técnicos
+- Tabela: T696FORU
+- Colunas: SQ_FRU, SQ_TP_FRU, CD_UND, SQ_PAT_MIN, NM_FRU, DH_INI, DH_TRM, DE_LOC, DE_OUT_AS, DE_TRT_OUT_AS, DE_HST, MT_USU_ALT, NM_USU_ALT, DH_ALT, ST_FRU
+- Chave estrangeira: SQ_TP_FRU → T696TPFR, SQ_PAT_MIN → T696PTMN
+```
+
+**Tipos de demanda que podem ser gerados:**
+
+| Tipo | Quando gerar | Ação do técnico |
+|------|-------------|-----------------|
+| **Entidade não mapeada** | Usuário menciona entidade que não está no `mapeamento-semantico.json` | Adicionar mapeamento ou gerar Entity via DDL |
+| **Atributo não encontrado** | Usuário menciona atributo que não existe na Entity | Verificar se é sinônimo ou se precisa adicionar coluna |
+| **Relacionamento não configurado** | Usuário tenta criar relação entre entidades que não têm FK configurada | Adicionar relacionamento no JSON ou na Entity |
+| **Valor de enum desconhecido** | Usuário usa valor que não está no mapeamento de situação | Adicionar novo valor ou sinônimo |
+| **Comando não reconhecido** | LLM não consegue interpretar o comando do usuário | Revisar `sinonimos.json` ou adicionar novo verbo |
+| **Erro de compilação** | `McpCompileService` falha ao compilar | Verificar erro no log do Maven e corrigir código gerado |
+| **Erro de persistência** | JPA lança exceção ao salvar dados | Verificar constraints, tipos de dados, relacionamentos |
+
+**Estrutura de diretórios para demandas:**
+
+```
+metadados-massa-mcp/
+└── demandas/
+    ├── pendentes/
+    │   ├── 2026-07-08-1430-forum.md
+    │   └── 2026-07-08-1505-atributo-data-inicio.md
+    └── resolvidas/
+        ├── 2026-07-07-1000-origem-acao.md
+        └── 2026-07-06-1600-situacao-portfolio.md
+```
+
+**Ferramentas MCP para demandas:**
+
+1. **`listar_demandas`** — Retorna lista de demandas pendentes com resumo
+2. **`resolver_demanda`** — Marca uma demanda como resolvida (recebe ID da demanda)
+3. **`detalhar_demanda`** — Retorna detalhes completos de uma demanda específica
+
+**Benefícios:**
+- ✅ **Evolução orgânica:** O sistema melhora com uso real
+- ✅ **Rastreabilidade:** Técnico sabe exatamente o que precisa ser feito
+- ✅ **Priorização:** Demandas mais frequentes indicam o que precisa ser resolvido primeiro
+- ✅ **Documentação:** Histórico de demandas serve como documentação viva
+- ✅ **Autonomia:** Técnico não precisa adivinhar o que falta — o sistema diz
 
 ## 🔗 Referências
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
