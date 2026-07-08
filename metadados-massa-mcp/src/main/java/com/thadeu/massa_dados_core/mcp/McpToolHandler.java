@@ -16,15 +16,18 @@ public class McpToolHandler {
     private final McpEntityMetadataService metadataService;
     private final McpMapeamentoSemanticoService mapeamentoSemanticoService;
     private final McpConsultaService consultaService;
+    private final McpDemandaService demandaService;
 
     public McpToolHandler(ObjectMapper objectMapper,
                           McpEntityMetadataService metadataService,
                           McpMapeamentoSemanticoService mapeamentoSemanticoService,
-                          McpConsultaService consultaService) {
+                          McpConsultaService consultaService,
+                          McpDemandaService demandaService) {
         this.objectMapper = objectMapper;
         this.metadataService = metadataService;
         this.mapeamentoSemanticoService = mapeamentoSemanticoService;
         this.consultaService = consultaService;
+        this.demandaService = demandaService;
     }
 
     public ServerResponse handle(ServerRequest request) {
@@ -52,6 +55,9 @@ public class McpToolHandler {
             case "get_entity_metadata" -> handleGetEntityMetadata(arguments, id);
             case "get_mapeamento_semantico" -> handleGetMapeamentoSemantico(arguments, id);
             case "consultar_dados" -> handleConsultarDados(arguments, id);
+            case "listar_demandas" -> handleListarDemandas(arguments, id);
+            case "resolver_demanda" -> handleResolverDemanda(arguments, id);
+            case "detalhar_demanda" -> handleDetalharDemanda(arguments, id);
             default -> errorResponse(-32602, "Unknown tool: " + toolName, id);
         };
     }
@@ -85,6 +91,49 @@ public class McpToolHandler {
             return successResponse(response, id);
         } catch (Exception e) {
             return errorResponse(-32603, "Error consulting data: " + e.getMessage(), id);
+        }
+    }
+
+    private ServerResponse handleListarDemandas(JsonNode arguments, JsonNode id) {
+        try {
+            var demandas = demandaService.listarDemandasPendentes();
+            return successResponse(Map.of("demandas", demandas), id);
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error listing demands: " + e.getMessage(), id);
+        }
+    }
+
+    private ServerResponse handleResolverDemanda(JsonNode arguments, JsonNode id) {
+        try {
+            String demandaId = arguments.has("id") ? arguments.get("id").asText() : "";
+            if (demandaId.isEmpty()) {
+                return errorResponse(-32602, "Parâmetro 'id' é obrigatório", id);
+            }
+            boolean resolvida = demandaService.resolverDemanda(demandaId);
+            if (resolvida) {
+                return successResponse(Map.of("mensagem", "Demanda resolvida com sucesso"), id);
+            } else {
+                return errorResponse(-32603, "Demanda não encontrada: " + demandaId, id);
+            }
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error resolving demand: " + e.getMessage(), id);
+        }
+    }
+
+    private ServerResponse handleDetalharDemanda(JsonNode arguments, JsonNode id) {
+        try {
+            String demandaId = arguments.has("id") ? arguments.get("id").asText() : "";
+            if (demandaId.isEmpty()) {
+                return errorResponse(-32602, "Parâmetro 'id' é obrigatório", id);
+            }
+            var detalhes = demandaService.detalharDemanda(demandaId);
+            if (detalhes != null) {
+                return successResponse(detalhes, id);
+            } else {
+                return errorResponse(-32603, "Demanda não encontrada: " + demandaId, id);
+            }
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error detailing demand: " + e.getMessage(), id);
         }
     }
 
@@ -160,6 +209,43 @@ public class McpToolHandler {
                                         )
                                 ),
                                 "required", java.util.List.of("comando", "entidade")
+                        )
+                ),
+                Map.of(
+                        "name", "listar_demandas",
+                        "description", "Lista as demandas pendentes de configuração",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(),
+                                "required", java.util.List.of()
+                        )
+                ),
+                Map.of(
+                        "name", "resolver_demanda",
+                        "description", "Marca uma demanda como resolvida",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "id", Map.of(
+                                                "type", "string",
+                                                "description", "ID da demanda (nome do arquivo)"
+                                        )
+                                ),
+                                "required", java.util.List.of("id")
+                        )
+                ),
+                Map.of(
+                        "name", "detalhar_demanda",
+                        "description", "Retorna detalhes completos de uma demanda específica",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "id", Map.of(
+                                                "type", "string",
+                                                "description", "ID da demanda (nome do arquivo)"
+                                        )
+                                ),
+                                "required", java.util.List.of("id")
                         )
                 )
         );
