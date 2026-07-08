@@ -15,10 +15,14 @@ public class McpToolHandler {
 
     private final ObjectMapper objectMapper;
     private final McpEntityMetadataService metadataService;
+    private final McpMapeamentoSemanticoService mapeamentoSemanticoService;
 
-    public McpToolHandler(ObjectMapper objectMapper, McpEntityMetadataService metadataService) {
+    public McpToolHandler(ObjectMapper objectMapper,
+                          McpEntityMetadataService metadataService,
+                          McpMapeamentoSemanticoService mapeamentoSemanticoService) {
         this.objectMapper = objectMapper;
         this.metadataService = metadataService;
+        this.mapeamentoSemanticoService = mapeamentoSemanticoService;
     }
 
     public ServerResponse handle(ServerRequest request) {
@@ -44,6 +48,7 @@ public class McpToolHandler {
 
         return switch (toolName) {
             case "get_entity_metadata" -> handleGetEntityMetadata(arguments, id);
+            case "get_mapeamento_semantico" -> handleGetMapeamentoSemantico(arguments, id);
             default -> errorResponse(-32602, "Unknown tool: " + toolName, id);
         };
     }
@@ -55,6 +60,18 @@ public class McpToolHandler {
             return successResponse(response, id);
         } catch (Exception e) {
             return errorResponse(-32603, "Error getting metadata: " + e.getMessage(), id);
+        }
+    }
+
+    private ServerResponse handleGetMapeamentoSemantico(JsonNode arguments, JsonNode id) {
+        try {
+            var response = Map.of(
+                    "mapeamentoSemantico", mapeamentoSemanticoService.getMapeamentoSemanticoJson(),
+                    "sinonimos", mapeamentoSemanticoService.getSinonimosJson()
+            );
+            return successResponse(response, id);
+        } catch (Exception e) {
+            return errorResponse(-32603, "Error getting mapeamento semantico: " + e.getMessage(), id);
         }
     }
 
@@ -72,6 +89,15 @@ public class McpToolHandler {
                                         )
                                 ),
                                 "required", java.util.List.of("className")
+                        )
+                ),
+                Map.of(
+                        "name", "get_mapeamento_semantico",
+                        "description", "Retorna o mapeamento semântico completo (entidades, atributos, valores de enum, sinônimos) para interpretação de comandos em linguagem natural",
+                        "inputSchema", Map.of(
+                                "type", "object",
+                                "properties", Map.of(),
+                                "required", java.util.List.of()
                         )
                 )
         );
