@@ -130,9 +130,10 @@ public record MissingColumnInfo(
   - **Não** usar `mcp-spring-boot-starter` (não existe no Maven Central)
 - [ ] 1.3 Cada projeto terá seu próprio `application.properties`:
   - Porta do servidor (8081 para Servidor 1, 8082 para Servidor 2)
-  - Configuração do datasource H2
-  - Caminho das classes Entity (`entity.classes.path`)
-  - Caminho do projeto para recompilação (`entity.project.path`)
+  - Configuração do datasource H2 (para teste e desenvolvimento)
+  - Caminho das classes Entity (`entity.classes.path`) — caminho absoluto ou relativo para o diretório onde estão as classes `.java` das entities
+  - Caminho do projeto para recompilação (`entity.project.path`) — caminho absoluto ou relativo para o diretório raiz do Servidor 2 (onde está o `pom.xml`)
+  - Configuração do banco de dados real (SQL Server) para produção, via perfis Spring (`application-prod.properties`)
 - [ ] 1.4 Cada projeto terá seu próprio `App.java` com `@SpringBootApplication`
 - [ ] 1.5 Verificar se o `.gitignore` ignora `project-docs/`
 
@@ -234,7 +235,7 @@ public class GlobalExceptionHandler {
         3.1.1.3 As entities contidas em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao não devem ser corrigidas pelo aider. Somente pelo configuracao-ddl-mcp
       3.1.2 Mecanismo de compartilhamento: ambos os servidores terão o mesmo diretório de entities como dependência local (via `pom.xml` com `<scope>compile</scope>` apontando para o caminho absoluto ou relativo). Alternativamente, usar um módulo Maven separado `entities-core` que ambos dependem.
 - [ ] 3.2 Verificar respostas no chat-mcp com os dois servidores configurados
-- [ ] 3.3 Testar erro para classe inexistente ou sem `@Entity`
+- [ ] 3.3 Testar classe inexistente — deve gerar a classe automaticamente (não é erro)
 - [ ] 3.4 Testar DDL inválido (sintaxe SQL incorreta) — deve retornar erro JSON-RPC com código `-32602` (Invalid params)
 - [ ] 3.5 Testar falha de compilação — `McpCompileService` deve retornar erro com detalhes da saída do Maven
 - [ ] 3.6 Testar timeout na compilação — configurar timeout de 60 segundos no `ProcessBuilder`
@@ -243,6 +244,12 @@ public class GlobalExceptionHandler {
 - [ ] 4.1 Configurar o servidor MCP no `~/.continue/config.json` (ou `config.ts`)
 - [ ] 4.2 Testar chamada da ferramenta `get_entity_metadata` pelo Continue
 - [ ] 4.3 Validar que o dicionário retornado permite gerar massa de dados
+
+### Fase 4.5 — Mapeamento Semântico (JSON + LLM)
+- [ ] 4.5.1 Criar arquivo `mapeamento-semantico.json` com o mapeamento de termos de negócio para tabelas, colunas e valores (conforme exemplo na seção "Abordagem Híbrida")
+- [ ] 4.5.2 O Servidor 2 deve carregar este JSON e disponibilizá-lo como contexto para o LLM
+- [ ] 4.5.3 O LLM (Continue) usa o JSON para interpretar comandos em linguagem natural e gerar JSON estruturado de criação de massa
+- [ ] 4.5.4 O Servidor 2 recebe o JSON estruturado e persiste os dados via JPA
 
 ### Fase 5 — Funcionalidades Avançadas
 - [ ] 5.1 **Ferramenta `ddl_to_entity`**:
@@ -354,9 +361,209 @@ raiz-do-repositorio/
     └── passo-a-passo.md
 ```
 
+### Abordagem Híbrida para Interpretação de Comandos (JSON + LLM)
+
+**Como funciona:**
+
+1. **JSON de Mapeamento Semântico** — Um arquivo JSON estático que mapeia termos de negócio para tabelas, colunas e valores numéricos. Exemplo:
+
+```json
+{
+  "entidades": {
+    "acao_estrategica": {
+      "tabela": "T696ACES",
+      "classe": "br.gov.bnb.domain.entity.AcaoEstrategica",
+      "atributos": {
+        "situacao": {
+          "coluna": "ST_ACO_ETT",
+          "mapeamento": {
+            "Proposta em Edição": 3,
+            "Ativo": 2,
+            "Inativo": 1,
+            "Proposta em Análise - Unidade": 4,
+            "Proposta Rejeitada pela Unidade": 5,
+            "Proposta em Planejamento": 6,
+            "Proposta em Análise - Gestor de Unidade": 7,
+            "Proposta em Análise - Amb. de Planejamento": 8,
+            "Proposta em Análise - Superintendência": 9,
+            "Proposta em Análise - Diretoria Executiva": 10
+          }
+        },
+        "portfolio": {
+          "coluna": "SQ_PTF_ACO",
+          "relacionamento": "Portfolio"
+        },
+        "origem": {
+          "coluna": "SQ_ORI_ACO",
+          "relacionamento": "OrigemAcaoEstrategica"
+        },
+        "unidade_operacional": {
+          "coluna": "CD_UND",
+          "relacionamento": "UnidadeOperacional"
+        },
+        "unidade_aprovacao": {
+          "coluna": "CD_UND_APR",
+          "relacionamento": "UnidadeOperacional"
+        },
+        "data_limite": {
+          "coluna": "DH_LIM",
+          "tipo": "LocalDate"
+        },
+        "nome": {
+          "coluna": "NM_ACO_ETT",
+          "tipo": "String"
+        },
+        "descricao": {
+          "coluna": "DE_ACO_ETT",
+          "tipo": "String"
+        }
+      },
+      "relacionamentos": {
+        "etapas": {
+          "tabela": "T696ETAC",
+          "classe": "br.gov.bnb.domain.entity.EtapaAcaoEstrategica",
+          "fk": "SQ_ACO_ETT"
+        },
+        "vinculacoes": {
+          "tabela": "T696VIAC",
+          "classe": "br.gov.bnb.domain.entity.VinculacaoAcaoEstrategica",
+          "fk": "SQ_ACO_ETT"
+        }
+      }
+    },
+    "portfolio": {
+      "tabela": "T696POAC",
+      "classe": "br.gov.bnb.domain.entity.Portfolio",
+      "atributos": {
+        "nome": { "coluna": "NM_PTF", "tipo": "String" },
+        "ano_realizacao": { "coluna": "AA_REA", "tipo": "Integer" },
+        "situacao": {
+          "coluna": "ST_PTF_ACO",
+          "mapeamento": {
+            "Em Elaboração": 1,
+            "Em Execução": 2,
+            "Em Replanejamento": 3,
+            "Em Encerramento": 4,
+            "Encerrado": 5
+          }
+        }
+      }
+    },
+    "etapa_acao_estrategica": {
+      "tabela": "T696ETAC",
+      "classe": "br.gov.bnb.domain.entity.EtapaAcaoEstrategica",
+      "atributos": {
+        "descricao": { "coluna": "DE_ETP_ACO", "tipo": "String" },
+        "entrega": { "coluna": "DE_ENT_ETP_ACO", "tipo": "String" },
+        "ano_realizacao": { "coluna": "AA_REA", "tipo": "Integer" },
+        "situacao": {
+          "coluna": "ST_ETP_ACO",
+          "mapeamento": {
+            "Não iniciada": 1,
+            "Em andamento": 2,
+            "Atrasada": 3,
+            "Não Concluída": 4,
+            "Concluída com Atraso": 5,
+            "Concluída": 6
+          }
+        }
+      },
+      "relacionamentos": {
+        "entregas": {
+          "tabela": "T696ENAC",
+          "classe": "br.gov.bnb.domain.entity.Entrega",
+          "fk": "SQ_ETP_ACO"
+        }
+      }
+    },
+    "entrega": {
+      "tabela": "T696ENAC",
+      "classe": "br.gov.bnb.domain.entity.Entrega",
+      "atributos": {
+        "mes_vigencia": { "coluna": "MM_ENT", "tipo": "Integer" },
+        "planejamento": { "coluna": "PC_PLJ_ENT", "tipo": "BigDecimal" },
+        "realizado": { "coluna": "PC_REA_ENT", "tipo": "BigDecimal" },
+        "descricao_realizado": { "coluna": "DE_REA_ENT", "tipo": "String" },
+        "situacao": {
+          "coluna": "ST_ENT_ACO",
+          "mapeamento": {
+            "Não iniciada": 1,
+            "Em andamento": 2,
+            "Atrasada": 3,
+            "Não Concluída": 4,
+            "Concluída com Atraso": 5,
+            "Concluída": 6
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+2. **LLM com Function Calling** — O LLM recebe esse JSON como contexto e usa tools/functions para gerar comandos estruturados:
+
+```json
+{
+  "comando": "criar_massa",
+  "entidades": [
+    {
+      "tipo": "portfolio",
+      "dados": {
+        "nome": "Portfolio Homologação 2026",
+        "ano_realizacao": 2026,
+        "situacao": "Em Elaboração"
+      },
+      "filhos": [
+        {
+          "tipo": "acao_estrategica",
+          "dados": {
+            "nome": "Ação 1",
+            "descricao": "Descrição da ação 1",
+            "situacao": "Proposta em Edição"
+          },
+          "filhos": [
+            {
+              "tipo": "etapa_acao_estrategica",
+              "dados": {
+                "descricao": "Etapa 1",
+                "entrega": "Entrega 1",
+                "ano_realizacao": 2026,
+                "situacao": "Não iniciada"
+              },
+              "filhos": [
+                {
+                  "tipo": "entrega",
+                  "dados": {
+                    "mes_vigencia": 9,
+                    "planejamento": 50.00,
+                    "situacao": "Não iniciada"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+3. **Servidor 2 executa** — O JSON estruturado é enviado para o Servidor 2 que usa JPA para persistir os dados no banco.
+
+**Por que essa abordagem?**
+- ✅ **Simplicidade:** JSON é fácil de criar e manter
+- ✅ **Flexibilidade:** O LLM lida com variações linguísticas naturalmente
+- ✅ **Controle:** O JSON define exatamente quais valores são válidos
+- ✅ **Evolução:** Adicionar novas entidades = adicionar novo bloco no JSON
+- ✅ **Custo-benefício:** Não requer infraestrutura adicional (grafos, vetores)
+
 ## 🔗 Referências
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
 - [Spring Boot](https://spring.io/projects/spring-boot)
 - [Reflection API Java](https://docs.oracle.com/javase/tutorial/reflect/)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [Spring Boot Actuator](https://docs.spring.io/spring-boot/docs/current/actuator/htmlsingle/)
+- [Spring Profiles](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.profiles)
+- [OpenAI Function Calling](https://platform.openai.com/docs/guides/function-calling)
