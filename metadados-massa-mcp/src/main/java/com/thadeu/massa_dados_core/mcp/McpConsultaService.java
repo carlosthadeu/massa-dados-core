@@ -16,11 +16,6 @@ public class McpConsultaService {
     private EntityManager entityManager;
 
     private final McpMapeamentoSemanticoService mapeamentoSemanticoService;
-
-    public McpConsultaService(McpMapeamentoSemanticoService mapeamentoSemanticoService) {
-        this.mapeamentoSemanticoService = mapeamentoSemanticoService;
-    }
-
     private final McpDemandaService demandaService;
 
     public McpConsultaService(McpMapeamentoSemanticoService mapeamentoSemanticoService,
