@@ -234,6 +234,8 @@ public class GlobalExceptionHandler {
         3.1.1.2 O metadados-massa-mcp irá utilizar estas classes para acessar a base de dados para CRUD, de acordo com o solicitado através do chat-mcp
         3.1.1.3 As entities contidas em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao não devem ser corrigidas pelo aider. Somente pelo configuracao-ddl-mcp
       3.1.2 Mecanismo de compartilhamento: ambos os servidores terão o mesmo diretório de entities como dependência local (via `pom.xml` com `<scope>compile</scope>` apontando para o caminho absoluto ou relativo). Alternativamente, usar um módulo Maven separado `entities-core` que ambos dependem.
+
+> ⚠️ **Importante:** O banco H2 (arquivo `project-docs/esquema-ddl-h2.sql`) é a **fonte da verdade** para a estrutura correta das tabelas. As entidades em `project-docs/dominio-aplicacao/entity/` são **cópias de teste**, desatualizadas e incompletas. **Nunca use essas entidades diretamente no código dos servidores.** Quando for necessário, crie cópias no package compartilhado entre os dois servidores (ex: `entities-core`). Se precisar testar novamente, copie novamente do original (`project-docs/dominio-aplicacao/entity/`) para o package compartilhado. O `configuracao-ddl-mcp` é o único responsável por atualizar essas cópias a partir do DDL.
 - [ ] 3.2 Verificar respostas no chat-mcp com os dois servidores configurados
 - [ ] 3.3 Testar classe inexistente — deve gerar a classe automaticamente (não é erro)
 - [ ] 3.4 Testar DDL inválido (sintaxe SQL incorreta) — deve retornar erro JSON-RPC com código `-32602` (Invalid params)
