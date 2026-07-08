@@ -247,9 +247,10 @@ public class GlobalExceptionHandler {
 
 ### Fase 4.5 — Mapeamento Semântico (JSON + LLM)
 - [ ] 4.5.1 Criar arquivo `mapeamento-semantico.json` com o mapeamento de termos de negócio para tabelas, colunas e valores (conforme exemplo na seção "Abordagem Híbrida")
-- [ ] 4.5.2 O Servidor 2 deve carregar este JSON e disponibilizá-lo como contexto para o LLM
-- [ ] 4.5.3 O LLM (Continue) usa o JSON para interpretar comandos em linguagem natural e gerar JSON estruturado de criação de massa
-- [ ] 4.5.4 O Servidor 2 recebe o JSON estruturado e persiste os dados via JPA
+- [ ] 4.5.2 Criar arquivo `sinonimos.json` com sinônimos de termos de negócio (verbos, entidades, atributos, valores de enum)
+- [ ] 4.5.3 O Servidor 2 deve carregar ambos os JSONs e disponibilizá-los como contexto para o LLM
+- [ ] 4.5.4 O LLM (Continue) usa os JSONs para interpretar comandos em linguagem natural e gerar JSON estruturado de criação de massa
+- [ ] 4.5.5 O Servidor 2 recebe o JSON estruturado e persiste os dados via JPA
 
 ### Fase 5 — Funcionalidades Avançadas
 - [ ] 5.1 **Ferramenta `ddl_to_entity`**:
@@ -361,7 +362,7 @@ raiz-do-repositorio/
     └── passo-a-passo.md
 ```
 
-### Abordagem Híbrida para Interpretação de Comandos (JSON + LLM)
+### Abordagem Híbrida para Interpretação de Comandos (JSON + LLM + Sinônimos)
 
 **Como funciona:**
 
@@ -371,22 +372,27 @@ raiz-do-repositorio/
 {
   "entidades": {
     "acao_estrategica": {
+      "sinonimos": ["acao", "ação", "iniciativa", "projeto"],
       "tabela": "T696ACES",
       "classe": "br.gov.bnb.domain.entity.AcaoEstrategica",
       "atributos": {
         "situacao": {
+          "sinonimos": ["status", "estado", "fase"],
           "coluna": "ST_ACO_ETT",
           "mapeamento": {
-            "Proposta em Edição": 3,
-            "Ativo": 2,
-            "Inativo": 1,
-            "Proposta em Análise - Unidade": 4,
-            "Proposta Rejeitada pela Unidade": 5,
-            "Proposta em Planejamento": 6,
-            "Proposta em Análise - Gestor de Unidade": 7,
-            "Proposta em Análise - Amb. de Planejamento": 8,
-            "Proposta em Análise - Superintendência": 9,
-            "Proposta em Análise - Diretoria Executiva": 10
+            "Proposta em Edição": {
+              "valor": 3,
+              "sinonimos": ["Em edição", "Editando", "Rascunho"]
+            },
+            "Ativo": { "valor": 2, "sinonimos": ["Ativa", "Vigente"] },
+            "Inativo": { "valor": 1, "sinonimos": ["Inativa", "Desativado"] },
+            "Proposta em Análise - Unidade": { "valor": 4, "sinonimos": ["Em análise unidade"] },
+            "Proposta Rejeitada pela Unidade": { "valor": 5, "sinonimos": ["Rejeitada unidade"] },
+            "Proposta em Planejamento": { "valor": 6, "sinonimos": ["Planejando"] },
+            "Proposta em Análise - Gestor de Unidade": { "valor": 7, "sinonimos": ["Em análise gestor"] },
+            "Proposta em Análise - Amb. de Planejamento": { "valor": 8, "sinonimos": ["Em análise planejamento"] },
+            "Proposta em Análise - Superintendência": { "valor": 9, "sinonimos": ["Em análise super"] },
+            "Proposta em Análise - Diretoria Executiva": { "valor": 10, "sinonimos": ["Em análise diretoria"] }
           }
         },
         "portfolio": {
@@ -432,6 +438,7 @@ raiz-do-repositorio/
       }
     },
     "portfolio": {
+      "sinonimos": ["portfólio", "carteira", "portifolio"],
       "tabela": "T696POAC",
       "classe": "br.gov.bnb.domain.entity.Portfolio",
       "atributos": {
@@ -440,16 +447,17 @@ raiz-do-repositorio/
         "situacao": {
           "coluna": "ST_PTF_ACO",
           "mapeamento": {
-            "Em Elaboração": 1,
-            "Em Execução": 2,
-            "Em Replanejamento": 3,
-            "Em Encerramento": 4,
-            "Encerrado": 5
+            "Em Elaboração": { "valor": 1, "sinonimos": ["Elaborando", "Criando", "Em criação"] },
+            "Em Execução": { "valor": 2, "sinonimos": ["Executando", "Em andamento"] },
+            "Em Replanejamento": { "valor": 3, "sinonimos": ["Replanejando"] },
+            "Em Encerramento": { "valor": 4, "sinonimos": ["Encerrando"] },
+            "Encerrado": { "valor": 5, "sinonimos": ["Finalizado", "Concluído"] }
           }
         }
       }
     },
     "etapa_acao_estrategica": {
+      "sinonimos": ["etapa", "fase", "passo", "estágio"],
       "tabela": "T696ETAC",
       "classe": "br.gov.bnb.domain.entity.EtapaAcaoEstrategica",
       "atributos": {
@@ -459,12 +467,12 @@ raiz-do-repositorio/
         "situacao": {
           "coluna": "ST_ETP_ACO",
           "mapeamento": {
-            "Não iniciada": 1,
-            "Em andamento": 2,
-            "Atrasada": 3,
-            "Não Concluída": 4,
-            "Concluída com Atraso": 5,
-            "Concluída": 6
+            "Não iniciada": { "valor": 1, "sinonimos": ["Pendente", "Aguardando", "Não começada"] },
+            "Em andamento": { "valor": 2, "sinonimos": ["Andamento", "Executando"] },
+            "Atrasada": { "valor": 3, "sinonimos": ["Em atraso"] },
+            "Não Concluída": { "valor": 4, "sinonimos": ["Incompleta"] },
+            "Concluída com Atraso": { "valor": 5, "sinonimos": ["Finalizada com atraso"] },
+            "Concluída": { "valor": 6, "sinonimos": ["Finalizada", "Completa"] }
           }
         }
       },
@@ -477,6 +485,7 @@ raiz-do-repositorio/
       }
     },
     "entrega": {
+      "sinonimos": ["deliverable", "resultado", "produto"],
       "tabela": "T696ENAC",
       "classe": "br.gov.bnb.domain.entity.Entrega",
       "atributos": {
@@ -487,12 +496,12 @@ raiz-do-repositorio/
         "situacao": {
           "coluna": "ST_ENT_ACO",
           "mapeamento": {
-            "Não iniciada": 1,
-            "Em andamento": 2,
-            "Atrasada": 3,
-            "Não Concluída": 4,
-            "Concluída com Atraso": 5,
-            "Concluída": 6
+            "Não iniciada": { "valor": 1, "sinonimos": ["Pendente", "Aguardando"] },
+            "Em andamento": { "valor": 2, "sinonimos": ["Andamento", "Executando"] },
+            "Atrasada": { "valor": 3, "sinonimos": ["Em atraso"] },
+            "Não Concluída": { "valor": 4, "sinonimos": ["Incompleta"] },
+            "Concluída com Atraso": { "valor": 5, "sinonimos": ["Finalizada com atraso"] },
+            "Concluída": { "valor": 6, "sinonimos": ["Finalizada", "Completa"] }
           }
         }
       }
@@ -501,7 +510,24 @@ raiz-do-repositorio/
 }
 ```
 
-2. **LLM com Function Calling** — O LLM recebe esse JSON como contexto e usa tools/functions para gerar comandos estruturados:
+2. **Arquivo `sinonimos.json`** — Arquivo separado com sinônimos de termos gerais (verbos, conceitos):
+
+```json
+{
+  "verbos": {
+    "criar": ["gerar", "cadastrar", "inserir", "adicionar", "cria", "crie", "criar"],
+    "listar": ["consultar", "buscar", "pesquisar", "exibir", "mostrar"],
+    "atualizar": ["alterar", "modificar", "editar", "mudar"],
+    "excluir": ["remover", "deletar", "apagar", "cancelar"]
+  },
+  "conceitos": {
+    "massa_de_dados": ["dados de teste", "dados mock", "dados fictícios", "dados de homologação"],
+    "homologacao": ["teste", "validação", "prova", "QA"]
+  }
+}
+```
+
+3. **LLM com Function Calling** — O LLM recebe ambos os JSONs como contexto e usa tools/functions para gerar comandos estruturados:
 
 ```json
 {
@@ -550,12 +576,23 @@ raiz-do-repositorio/
 }
 ```
 
-3. **Servidor 2 executa** — O JSON estruturado é enviado para o Servidor 2 que usa JPA para persistir os dados no banco.
+4. **Servidor 2 executa** — O JSON estruturado é enviado para o Servidor 2 que usa JPA para persistir os dados no banco.
+
+**Estratégia de resolução de sinônimos:**
+
+| Nível | Onde definir | Exemplo |
+|-------|-------------|---------|
+| **Entidade** | Campo `sinonimos` no `mapeamento-semantico.json` | `"acao_estrategica": { "sinonimos": ["acao", "ação", "iniciativa"] }` |
+| **Atributo** | Campo `sinonimos` dentro do atributo | `"situacao": { "sinonimos": ["status", "estado"] }` |
+| **Valor de enum** | Campo `sinonimos` dentro do valor mapeado | `"Proposta em Edição": { "valor": 3, "sinonimos": ["Em edição", "Rascunho"] }` |
+| **Verbos e conceitos** | Arquivo `sinonimos.json` separado | `"criar": ["gerar", "cadastrar", "inserir"]` |
+| **Resolução final** | LLM com function calling | O LLM usa os sinônimos como contexto e faz o matching semântico |
 
 **Por que essa abordagem?**
 - ✅ **Simplicidade:** JSON é fácil de criar e manter
 - ✅ **Flexibilidade:** O LLM lida com variações linguísticas naturalmente
 - ✅ **Controle:** O JSON define exatamente quais valores são válidos
+- ✅ **Sinônimos explícitos:** Reduz ambiguidades sem depender 100% do LLM
 - ✅ **Evolução:** Adicionar novas entidades = adicionar novo bloco no JSON
 - ✅ **Custo-benefício:** Não requer infraestrutura adicional (grafos, vetores)
 
