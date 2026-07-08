@@ -1,0 +1,211 @@
+package com.thadeu.massa_dados_core.mcp;
+
+import com.thadeu.massa_dados_core.mcp.dto.AttributeInfo;
+import com.thadeu.massa_dados_core.mcp.dto.DdlRequest;
+import com.thadeu.massa_dados_core.mcp.dto.DdlResponse;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Service
+public class McpDdlToEntityService {
+
+    @Value("${entity.classes.path}")
+    private String entityClassesPath;
+
+    @Value("${entity.project.path}")
+    private String entityProjectPath;
+
+    private final McpCompileService compileService;
+
+    public McpDdlToEntityService(McpCompileService compileService) {
+        this.compileService = compileService;
+    }
+
+    public DdlResponse processDdl(DdlRequest request) throws IOException {
+        String ddl = request.ddlScript();
+
+        // Extrair nome da tabela
+        String tableName = extractTableName(ddl);
+        if (tableName == null) {
+            throw new IllegalArgumentException("Não foi possível extrair o nome da tabela do DDL");
+        }
+
+        // Extrair colunas
+        List<ColumnInfo> columns = extractColumns(ddl);
+
+        // Gerar nome da classe (PascalCase a partir do nome da tabela)
+        String className = toPascalCase(tableName);
+
+        // Gerar código da Entity
+        String entityCode = generateEntityCode(className, tableName, columns);
+
+        // Salvar arquivo
+        String packagePath = "br.gov.bnb.domain.entity";
+        String packageDir = packagePath.replace('.', File.separatorChar);
+        Path outputDir = Paths.get(entityClassesPath, packageDir);
+        Files.createDirectories(outputDir);
+
+        Path outputFile = outputDir.resolve(className + ".java");
+        Files.writeString(outputFile, entityCode);
+
+        // Recompilar Servidor 2
+        McpCompileService.CompileResult compileResult = compileService.compile();
+
+        // Construir resposta
+        List<AttributeInfo> attributes = columns.stream()
+                .map(col -> new AttributeInfo(
+                        toCamelCase(col.name()),
+                        mapSqlTypeToJava(col.type()),
+                        col.nullable(),
+                        col.primaryKey(),
+                        col.primaryKey(),
+                        col.name(),
+                        null, null, null,
+                        List.of()
+                ))
+                .toList();
+
+        return new DdlResponse(className, entityCode, tableName, attributes, compileResult.success(), compileResult.message());
+    }
+
+    private String extractTableName(String ddl) {
+        Pattern pattern = Pattern.compile("CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)",
+                Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(ddl);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    private List<ColumnInfo> extractColumns(String ddl) {
+        List<ColumnInfo> columns = new ArrayList<>();
+        // Extrair bloco entre parênteses
+        int start = ddl.indexOf('(');
+        int end = ddl.lastIndexOf(')');
+        if (start < 0 || end < 0) return columns;
+
+        String body = ddl.substring(start + 1, end);
+        String[] lines = body.split(",\\s*");
+
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty() || line.toUpperCase().startsWith("CONSTRAINT") || line.toUpperCase().startsWith("PRIMARY KEY")) {
+                continue;
+            }
+
+            // Extrair nome da coluna e tipo
+            String[] parts = line.split("\\s+", 3);
+            if (parts.length < 2) continue;
+
+            String colName = parts[0];
+            String colType = parts[1].toUpperCase();
+
+            boolean nullable = !line.toUpperCase().contains("NOT NULL");
+            boolean primaryKey = line.toUpperCase().contains("PRIMARY KEY");
+
+            columns.add(new ColumnInfo(colName, colType, nullable, primaryKey));
+        }
+
+        return columns;
+    }
+
+    private String generateEntityCode(String className, String tableName, List<ColumnInfo> columns) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("package br.gov.bnb.domain.entity;\n\n");
+        sb.append("import javax.persistence.*;\n");
+        sb.append("import java.io.Serializable;\n");
+        sb.append("import java.time.LocalDateTime;\n");
+        sb.append("import java.math.BigDecimal;\n\n");
+        sb.append("@Entity\n");
+        sb.append("@Table(name=\"").append(tableName).append("\")\n");
+        sb.append("public class ").append(className).append(" implements Serializable {\n\n");
+
+        // Atributos
+        for (ColumnInfo col : columns) {
+            String fieldName = toCamelCase(col.name());
+            String javaType = mapSqlTypeToJava(col.type());
+
+            sb.append("    @Column(name = \"").append(col.name()).append("\"");
+            if (!col.nullable()) {
+                sb.append(", nullable = false");
+            }
+            sb.append(")\n");
+            if (col.primaryKey()) {
+                sb.append("    @Id\n");
+                sb.append("    @GeneratedValue(strategy = GenerationType.IDENTITY)\n");
+            }
+            sb.append("    private ").append(javaType).append(" ").append(fieldName).append(";\n\n");
+        }
+
+        // Getters e Setters
+        for (ColumnInfo col : columns) {
+            String fieldName = toCamelCase(col.name());
+            String javaType = mapSqlTypeToJava(col.type());
+            String getterName = "get" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+            String setterName = "set" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+
+            sb.append("    public ").append(javaType).append(" ").append(getterName).append("() {\n");
+            sb.append("        return ").append(fieldName).append(";\n");
+            sb.append("    }\n\n");
+
+            sb.append("    public void ").append(setterName).append("(").append(javaType).append(" ").append(fieldName).append(") {\n");
+            sb.append("        this.").append(fieldName).append(" = ").append(fieldName).append(";\n");
+            sb.append("    }\n\n");
+        }
+
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    private String toPascalCase(String tableName) {
+        // Remove prefixo T696 e sufixo
+        String name = tableName;
+        if (name.startsWith("T696")) {
+            name = name.substring(4);
+        }
+        // Converte snake_case para PascalCase
+        StringBuilder sb = new StringBuilder();
+        boolean nextUpper = true;
+        for (char c : name.toCharArray()) {
+            if (c == '_') {
+                nextUpper = true;
+            } else if (nextUpper) {
+                sb.append(Character.toUpperCase(c));
+                nextUpper = false;
+            } else {
+                sb.append(Character.toLowerCase(c));
+            }
+        }
+        return sb.toString();
+    }
+
+    private String toCamelCase(String columnName) {
+        String pascal = toPascalCase(columnName);
+        if (pascal.isEmpty()) return "";
+        return Character.toLowerCase(pascal.charAt(0)) + pascal.substring(1);
+    }
+
+    private String mapSqlTypeToJava(String sqlType) {
+        return switch (sqlType) {
+            case "INT", "INTEGER", "SMALLINT", "BIGINT" -> "Long";
+            case "VARCHAR", "CHAR", "CLOB" -> "String";
+            case "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE" -> "BigDecimal";
+            case "BOOLEAN", "BIT" -> "Boolean";
+            case "TIMESTAMP", "DATETIME", "DATE" -> "LocalDateTime";
+            default -> "String";
+        };
+    }
+
+    record ColumnInfo(String name, String type, boolean nullable, boolean primaryKey) {}
+}
