@@ -18,39 +18,55 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Serviço responsável por identificar tabelas e colunas não reconhecidas
+ * comparando um script DDL com as classes Entity existentes.
+ *
+ * <p>Responsabilidades:
+ * <ul>
+ *   <li>Extrair tabelas e colunas de um script DDL</li>
+ *   <li>Comparar com as classes Entity existentes no diretório de entidades</li>
+ *   <li>Retornar lista de tabelas e colunas não reconhecidas</li>
+ * </ul>
+ *
+ * @author Thadeu Garrido
+ * @version 1.0
+ */
 @Service
 public class McpUnknownEntityService {
 
     @Value("${entity.classes.path}")
     private String entityClassesPath;
 
+    /**
+     * Identifica tabelas e colunas não reconhecidas comparando o DDL com as Entity existentes.
+     *
+     * @param request requisição contendo o script DDL
+     * @return resposta com listas de tabelas e colunas faltantes
+     * @throws IOException se houver erro ao ler os arquivos de entidades
+     */
     public UnknownEntityResponse identify(UnknownEntityRequest request) throws IOException {
         String ddl = request.ddlScript();
 
-        // Extrair tabelas do DDL
         List<String> ddlTables = extractTableNames(ddl);
         List<TableColumnInfo> ddlColumns = extractAllColumns(ddl);
 
-        // Obter tabelas existentes das classes Entity
         List<String> existingTables = getExistingTables();
 
-        // Identificar tabelas faltantes
         List<String> missingTables = ddlTables.stream()
                 .filter(t -> !existingTables.contains(t))
                 .collect(Collectors.toList());
 
-        // Identificar colunas faltantes
         List<MissingColumnInfo> missingColumns = new ArrayList<>();
         for (TableColumnInfo tableCol : ddlColumns) {
             if (existingTables.contains(tableCol.tableName())) {
-                // Verificar colunas existentes na Entity
                 List<String> existingColumns = getExistingColumns(tableCol.tableName());
                 for (String colName : tableCol.columns()) {
                     if (!existingColumns.contains(colName)) {
                         missingColumns.add(new MissingColumnInfo(
                                 tableCol.tableName(),
                                 colName,
-                                "String", // tipo genérico
+                                "String",
                                 true
                         ));
                     }
@@ -61,6 +77,12 @@ public class McpUnknownEntityService {
         return new UnknownEntityResponse(missingTables, missingColumns);
     }
 
+    /**
+     * Extrai nomes de tabelas de um script DDL.
+     *
+     * @param ddl script DDL
+     * @return lista de nomes de tabelas
+     */
     private List<String> extractTableNames(String ddl) {
         List<String> tables = new ArrayList<>();
         Pattern pattern = Pattern.compile("CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)",
@@ -72,21 +94,24 @@ public class McpUnknownEntityService {
         return tables;
     }
 
+    /**
+     * Extrai informações de colunas de um script DDL.
+     *
+     * @param ddl script DDL
+     * @return lista de informações de tabelas e suas colunas
+     */
     private List<TableColumnInfo> extractAllColumns(String ddl) {
         List<TableColumnInfo> result = new ArrayList<>();
-        // Dividir por CREATE TABLE
         String[] statements = ddl.split("(?i)CREATE\\s+TABLE");
         for (String stmt : statements) {
             stmt = stmt.trim();
             if (stmt.isEmpty()) continue;
 
-            // Extrair nome da tabela
             Pattern tablePattern = Pattern.compile("(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)\\s*\\(");
             Matcher tableMatcher = tablePattern.matcher(stmt);
             if (!tableMatcher.find()) continue;
             String tableName = tableMatcher.group(1);
 
-            // Extrair colunas
             List<String> columns = new ArrayList<>();
             int start = stmt.indexOf('(');
             int end = stmt.lastIndexOf(')');
@@ -110,6 +135,12 @@ public class McpUnknownEntityService {
         return result;
     }
 
+    /**
+     * Obtém a lista de nomes de tabelas das classes Entity existentes.
+     *
+     * @return lista de nomes de tabelas
+     * @throws IOException se houver erro ao ler os arquivos
+     */
     private List<String> getExistingTables() throws IOException {
         Path entityDir = Paths.get(entityClassesPath, "br", "gov", "bnb", "domain", "entity");
         if (!Files.exists(entityDir)) return List.of();
@@ -123,6 +154,12 @@ public class McpUnknownEntityService {
         }
     }
 
+    /**
+     * Extrai o nome da tabela de um arquivo de classe Entity.
+     *
+     * @param filePath caminho do arquivo
+     * @return nome da tabela ou null se não encontrado
+     */
     private String extractTableNameFromFile(Path filePath) {
         try {
             String content = Files.readString(filePath);
@@ -135,6 +172,12 @@ public class McpUnknownEntityService {
         return null;
     }
 
+    /**
+     * Obtém a lista de nomes de colunas de uma tabela específica.
+     *
+     * @param tableName nome da tabela
+     * @return lista de nomes de colunas
+     */
     private List<String> getExistingColumns(String tableName) {
         Path entityDir = Paths.get(entityClassesPath, "br", "gov", "bnb", "domain", "entity");
         if (!Files.exists(entityDir)) return List.of();
@@ -164,6 +207,12 @@ public class McpUnknownEntityService {
         }
     }
 
+    /**
+     * Extrai nomes de colunas de um conteúdo Java.
+     *
+     * @param javaContent conteúdo do arquivo Java
+     * @return lista de nomes de colunas
+     */
     private List<String> extractColumnNames(String javaContent) {
         List<String> columns = new ArrayList<>();
         Pattern pattern = Pattern.compile("@Column\\(name\\s*=\\s*\"(\\w+)\"\\)");
@@ -174,5 +223,11 @@ public class McpUnknownEntityService {
         return columns;
     }
 
+    /**
+     * Registro interno para informações de tabela e suas colunas.
+     *
+     * @param tableName nome da tabela
+     * @param columns   lista de nomes de colunas
+     */
     record TableColumnInfo(String tableName, List<String> columns) {}
 }
