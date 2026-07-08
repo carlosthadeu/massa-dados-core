@@ -13,7 +13,7 @@ O segundo servidor (metadados-massa-mcp):
 ## 🧱 Arquitetura
 ```
 Cliente MCP (Continue)
-    ↓ (JSON-RPC via HTTP)
+    ↓ (JSON-RPC via HTTP, endpoint /mcp)
 configuracao-ddl-mcp — Configuração e DDL (Spring Boot, porta 8081)
     ├── McpServerConfig (configuração do protocolo MCP)
     ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities")
@@ -27,6 +27,91 @@ metadados-massa-mcp — Metadados e Massa de Dados (Spring Boot, porta 8082)
     ├── McpToolHandler (ferramenta "get_entity_metadata")
     ├── McpEntityMetadataService (lógica de reflection)
     └── dto/ (EntityMetadataRequest, EntityMetadataResponse)
+```
+
+### 📡 Protocolo JSON-RPC
+
+Cada servidor expõe um endpoint `POST /mcp` que aceita o formato JSON-RPC 2.0:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_entity_metadata",
+    "arguments": {
+      "className": "br.gov.bnb.domain.entity.Portfolio"
+    }
+  },
+  "id": 1
+}
+```
+
+Resposta de sucesso:
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{ \"className\": \"Portfolio\", \"tableName\": \"T696POAC\", ... }"
+      }
+    ]
+  },
+  "id": 1
+}
+```
+
+Resposta de erro:
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32603,
+    "message": "Classe não encontrada: br.gov.bnb.domain.entity.PortfolioInexistente"
+  },
+  "id": 1
+}
+```
+
+### 🧩 Records compartilhados
+
+#### AttributeInfo
+```java
+public record AttributeInfo(
+    String name,
+    String type,
+    boolean nullable,
+    boolean isId,
+    boolean isGeneratedValue,
+    String columnName,
+    Integer length,
+    Integer precision,
+    Integer scale,
+    List<String> annotations
+) {}
+```
+
+#### RelationshipInfo
+```java
+public record RelationshipInfo(
+    String fieldName,
+    String targetEntity,
+    String mappedBy,
+    String joinColumn,
+    String relationshipType  // "ManyToOne", "OneToMany", "OneToOne", "ManyToMany"
+) {}
+```
+
+#### MissingColumnInfo
+```java
+public record MissingColumnInfo(
+    String tableName,
+    String columnName,
+    String columnType,
+    boolean nullable
+) {}
 ```
 
 ## ✅ Checklist
@@ -93,14 +178,66 @@ metadados-massa-mcp — Metadados e Massa de Dados (Spring Boot, porta 8082)
     - Se for relacionamento, extrair a entidade alvo
   - Retornar `EntityMetadataResponse`
 
+#### Configuração de CORS
+- [ ] 2.6 Adicionar configuração CORS em ambos os servidores para permitir requisições de qualquer origem (necessário para o Continue chamar via HTTP)
+
+```java
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("*")
+                .allowedMethods("POST", "OPTIONS")
+                .allowedHeaders("*");
+    }
+}
+```
+
+#### Configuração de scan de pacotes
+- [ ] 2.7 Configurar `@SpringBootApplication` para escanear também o pacote das entities:
+
+```java
+@SpringBootApplication(scanBasePackages = {
+    "com.thadeu.massa_dados_core",
+    "br.gov.bnb.domain.entity"
+})
+public class App {
+    public static void main(String[] args) {
+        SpringApplication.run(App.class, args);
+    }
+}
+```
+
+#### Tratamento de erros padronizado
+- [ ] 2.8 Implementar um `@ControllerAdvice` global em cada servidor para capturar exceções e retornar respostas JSON-RPC de erro padronizadas:
+
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleEntityNotFound(EntityNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+            "jsonrpc", "2.0",
+            "error", Map.of("code", -32603, "message", ex.getMessage()),
+            "id", null
+        ));
+    }
+}
+```
+
 ### Fase 3 — Testes
 - [ ] 3.1 Testar com as entidades em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao
       3.1.1 Criar um package que seja compartilhado entre os dois servidores mcp
         3.1.1.1 O configuracao-ddl-mcp irá fazer a atualização entre o ddl e as entities
         3.1.1.2 O metadados-massa-mcp irá utilizar estas classes para acessar a base de dados para CRUD, de acordo com o solicitado através do chat-mcp
         3.1.1.3 As entities contidas em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao não devem ser corrigidas pelo aider. Somente pelo configuracao-ddl-mcp
+      3.1.2 Mecanismo de compartilhamento: ambos os servidores terão o mesmo diretório de entities como dependência local (via `pom.xml` com `<scope>compile</scope>` apontando para o caminho absoluto ou relativo). Alternativamente, usar um módulo Maven separado `entities-core` que ambos dependem.
 - [ ] 3.2 Verificar respostas no chat-mcp com os dois servidores configurados
 - [ ] 3.3 Testar erro para classe inexistente ou sem `@Entity`
+- [ ] 3.4 Testar DDL inválido (sintaxe SQL incorreta) — deve retornar erro JSON-RPC com código `-32602` (Invalid params)
+- [ ] 3.5 Testar falha de compilação — `McpCompileService` deve retornar erro com detalhes da saída do Maven
+- [ ] 3.6 Testar timeout na compilação — configurar timeout de 60 segundos no `ProcessBuilder`
 
 ### Fase 4 — Integração com Continue
 - [ ] 4.1 Configurar o servidor MCP no `~/.continue/config.json` (ou `config.ts`)
@@ -130,10 +267,49 @@ metadados-massa-mcp — Metadados e Massa de Dados (Spring Boot, porta 8082)
 - [ ] 5.4 **Recompilação do Servidor 2**:
   - Criar `McpCompileService` no Servidor 1 que:
     - Executa `mvn compile` no diretório do Servidor 2 (via `ProcessBuilder`)
-    - Ou chama um endpoint REST no Servidor 2 para recarregar classes (ex: `/actuator/restart`)
-    - Retorna sucesso/erro da compilação
+    - Timeout de 60 segundos
+    - Captura stdout e stderr para diagnóstico
+    - Retorna sucesso/erro da compilação com detalhes
   - Integrar `McpCompileService` no fluxo de `ddl_to_entity`
   - Garantir que o Servidor 2 esteja configurado para aceitar recarga (ex: Spring Boot DevTools ou actuator restart)
+  - Após compilação bem-sucedida, chamar endpoint `/actuator/restart` do Servidor 2 (se disponível) ou reiniciar o processo manualmente
+
+#### Detalhamento do `McpCompileService`
+
+```java
+@Service
+public class McpCompileService {
+
+    @Value("${entity.project.path}")
+    private String projectPath;
+
+    public CompileResult compile() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "mvn.cmd", "compile", "-q"
+            );
+            pb.directory(new File(projectPath));
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            
+            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return new CompileResult(false, "Timeout após 60 segundos");
+            }
+            
+            String output = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.exitValue();
+            
+            return new CompileResult(exitCode == 0, output);
+        } catch (Exception e) {
+            return new CompileResult(false, e.getMessage());
+        }
+    }
+    
+    public record CompileResult(boolean success, String message) {}
+}
+```
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
@@ -182,3 +358,5 @@ raiz-do-repositorio/
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
 - [Spring Boot](https://spring.io/projects/spring-boot)
 - [Reflection API Java](https://docs.oracle.com/javase/tutorial/reflect/)
+- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
+- [Spring Boot Actuator](https://docs.spring.io/spring-boot/docs/current/actuator/htmlsingle/)
