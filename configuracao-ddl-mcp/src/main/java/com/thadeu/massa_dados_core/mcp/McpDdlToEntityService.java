@@ -61,7 +61,11 @@ public class McpDdlToEntityService {
     public DdlResponse processDdl(DdlRequest request) throws IOException {
         String ddl = request.ddlScript();
 
-        // Extrair nome da tabela
+                if (ddl == null || ddl.trim().isEmpty()) {
+                    throw new IllegalArgumentException("DDL invalido");
+                }
+
+                // Extrair nome da tabela
         String tableName = extractTableName(ddl);
         if (tableName == null) {
             throw new IllegalArgumentException("Não foi possível extrair o nome da tabela do DDL");
@@ -135,7 +139,7 @@ public class McpDdlToEntityService {
         if (start < 0 || end < 0) return columns;
 
         String body = ddl.substring(start + 1, end);
-        String[] lines = body.split(",\\s*");
+        String[] lines = body.split(",\\s*(?![^()]*\\))");
 
         for (String line : lines) {
             line = line.trim();
@@ -148,7 +152,8 @@ public class McpDdlToEntityService {
             if (parts.length < 2) continue;
 
             String colName = parts[0];
-            String colType = parts[1].toUpperCase();
+            String rawType = parts[1].toUpperCase();
+            String colType = rawType.contains("(") ? rawType.substring(0, rawType.indexOf('(')) : rawType;
 
             boolean nullable = !line.toUpperCase().contains("NOT NULL");
             boolean primaryKey = line.toUpperCase().contains("PRIMARY KEY");

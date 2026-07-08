@@ -41,3 +41,5 @@ test-output/
 
 # Documentação do projeto (não deve ser versionada)
 project-docs/
+.continue
+fix-service.ps1
