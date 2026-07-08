@@ -252,20 +252,57 @@ public class GlobalExceptionHandler {
 - [ ] 4.5.4 O LLM (Continue) usa os JSONs para interpretar comandos em linguagem natural e gerar JSON estruturado de criação de massa
 - [ ] 4.5.5 O Servidor 2 recebe o JSON estruturado e persiste os dados via JPA
 
-### Fase 4.6 — Aprimoramento Contínuo (Geração de Demandas)
-- [ ] 4.6.1 Quando o Servidor 2 não conseguir responder uma pergunta ou executar um comando, ele deve gerar automaticamente um arquivo `.md` na pasta `demandas/` com:
+### Fase 4.6 — Consulta em Linguagem Natural
+- [ ] 4.6.1 Criar ferramenta MCP `consultar_dados` no Servidor 2 que recebe uma pergunta em linguagem natural e retorna dados do banco
+- [ ] 4.6.2 Criar serviço `McpConsultaService.java` que:
+  - Recebe o JSON de consulta estruturado gerado pelo LLM
+  - Converte para Criteria API ou JPQL
+  - Executa contra o banco de dados
+  - Formata a resposta em linguagem natural
+- [ ] 4.6.3 Atualizar o `mapeamento-semantico.json` para incluir operadores de consulta (`=`, `>`, `<`, `LIKE`, `IN`, `BETWEEN`, etc.)
+- [ ] 4.6.4 O LLM usa o mesmo mapeamento semântico para interpretar perguntas e gerar JSON de consulta:
+
+```json
+{
+  "comando": "consultar",
+  "entidade": "acao_estrategica",
+  "filtros": [
+    { "atributo": "situacao", "operador": "=", "valor": "Ativo" }
+  ],
+  "agregacao": "count",
+  "ordenacao": null,
+  "limite": null
+}
+```
+
+- [ ] 4.6.5 Exemplos de perguntas que o sistema deve suportar:
+  - "Quantas ações estratégicas estão ativas?"
+  - "Liste os portfolios do ano 2026"
+  - "Quais etapas estão atrasadas no portfolio 'Homologação 2026'?"
+  - "Mostre as entregas do mês de setembro"
+  - "Qual a média de planejamento das entregas?"
+- [ ] 4.6.6 Criar DTOs para consulta:
+  - `ConsultaRequest.java` — record com campo `pergunta` (String)
+  - `ConsultaResponse.java` — record com campos:
+    - `resposta` (String) — resposta em linguagem natural
+    - `dados` (List<Map<String, Object>>) — dados brutos (opcional)
+    - `sqlGerado` (String) — SQL gerado para depuração (opcional)
+- [ ] 4.6.7 Testar consultas simples (sem joins) e complexas (com joins, agregações, subconsultas)
+
+### Fase 4.7 — Aprimoramento Contínuo (Geração de Demandas)
+- [ ] 4.7.1 Quando o Servidor 2 não conseguir responder uma pergunta ou executar um comando, ele deve gerar automaticamente um arquivo `.md` na pasta `demandas/` com:
   - Data/hora da solicitação
   - Descrição do que foi solicitado (texto original do usuário)
   - Motivo da falha (ex: "Entidade 'forum' não mapeada", "Atributo 'data_inicio' não encontrado", "Relacionamento entre X e Y não configurado")
   - Sugestão de ação para o técnico (ex: "Adicionar mapeamento para T696FORU no mapeamento-semantico.json", "Criar classe Entity para T696FORU via ddl_to_entity")
   - Stack trace ou detalhes técnicos relevantes
-- [ ] 4.6.2 Criar endpoint `/demandas` no Servidor 2 que lista as demandas pendentes
-- [ ] 4.6.3 Criar ferramenta MCP `listar_demandas` que retorna as demandas pendentes para o chat-mcp
-- [ ] 4.6.4 O técnico pode consultar as demandas via chat-mcp ou diretamente no endpoint REST
-- [ ] 4.6.5 Após o técnico resolver a demanda (ex: adicionar mapeamento, criar Entity), ele marca a demanda como resolvida via ferramenta MCP `resolver_demanda` ou editando o arquivo `.md`
-- [ ] 4.6.6 O sistema deve manter um histórico de demandas resolvidas para referência futura
+- [ ] 4.7.2 Criar endpoint `/demandas` no Servidor 2 que lista as demandas pendentes
+- [ ] 4.7.3 Criar ferramenta MCP `listar_demandas` que retorna as demandas pendentes para o chat-mcp
+- [ ] 4.7.4 O técnico pode consultar as demandas via chat-mcp ou diretamente no endpoint REST
+- [ ] 4.7.5 Após o técnico resolver a demanda (ex: adicionar mapeamento, criar Entity), ele marca a demanda como resolvida via ferramenta MCP `resolver_demanda` ou editando o arquivo `.md`
+- [ ] 4.7.6 O sistema deve manter um histórico de demandas resolvidas para referência futura
 
-### Fase 5 — Funcionalidades Avançadas
+### Fase 5 — Funcionalidades Avançadas (DDL e Compilação)
 - [ ] 5.1 **Ferramenta `ddl_to_entity`**:
   - Receber um script DDL (CREATE TABLE, ALTER TABLE, etc.)
   - Analisar sintaxe SQL e extrair:
@@ -608,6 +645,175 @@ raiz-do-repositorio/
 - ✅ **Sinônimos explícitos:** Reduz ambiguidades sem depender 100% do LLM
 - ✅ **Evolução:** Adicionar novas entidades = adicionar novo bloco no JSON
 - ✅ **Custo-benefício:** Não requer infraestrutura adicional (grafos, vetores)
+
+### Consulta em Linguagem Natural
+
+**Objetivo:** Permitir que o usuário faça perguntas sobre os dados existentes no banco usando linguagem natural, sem precisar escrever SQL ou conhecer a estrutura das tabelas.
+
+**Fluxo de Consulta:**
+
+```
+Usuário: "Quantas ações estratégicas estão ativas?"
+    ↓
+LLM recebe pergunta + mapeamento semântico + sinonimos.json
+    ↓
+LLM gera JSON de consulta estruturado
+    ↓
+Servidor 2 recebe JSON e executa via JPA Criteria
+    ↓
+Retorna resposta em linguagem natural
+```
+
+**Exemplo de JSON de consulta gerado pelo LLM:**
+
+```json
+{
+  "comando": "consultar",
+  "entidade": "acao_estrategica",
+  "filtros": [
+    { "atributo": "situacao", "operador": "=", "valor": "Ativo" }
+  ],
+  "agregacao": "count",
+  "ordenacao": null,
+  "limite": null
+}
+```
+
+**Exemplos de perguntas e JSONs gerados:**
+
+| Pergunta | JSON de consulta |
+|----------|-----------------|
+| "Quantas ações estratégicas estão ativas?" | `{ "comando": "consultar", "entidade": "acao_estrategica", "filtros": [{ "atributo": "situacao", "operador": "=", "valor": "Ativo" }], "agregacao": "count" }` |
+| "Liste os portfolios do ano 2026" | `{ "comando": "consultar", "entidade": "portfolio", "filtros": [{ "atributo": "ano_realizacao", "operador": "=", "valor": 2026 }], "agregacao": null, "ordenacao": { "atributo": "nome", "direcao": "asc" } }` |
+| "Quais etapas estão atrasadas no portfolio 'Homologação 2026'?" | `{ "comando": "consultar", "entidade": "etapa_acao_estrategica", "filtros": [{ "atributo": "situacao", "operador": "=", "valor": "Atrasada" }, { "atributo": "portfolio.nome", "operador": "=", "valor": "Homologação 2026" }], "agregacao": null }` |
+| "Mostre as entregas do mês de setembro" | `{ "comando": "consultar", "entidade": "entrega", "filtros": [{ "atributo": "mes_vigencia", "operador": "=", "valor": 9 }], "agregacao": null }` |
+| "Qual a média de planejamento das entregas?" | `{ "comando": "consultar", "entidade": "entrega", "filtros": [], "agregacao": "avg", "atributo_agregacao": "planejamento" }` |
+
+**Operadores de consulta suportados:**
+
+| Operador | Descrição | Exemplo |
+|----------|-----------|---------|
+| `=` | Igualdade | `situacao = "Ativo"` |
+| `!=` | Diferente | `situacao != "Inativo"` |
+| `>` | Maior que | `ano_realizacao > 2025` |
+| `>=` | Maior ou igual | `ano_realizacao >= 2026` |
+| `<` | Menor que | `mes_vigencia < 10` |
+| `<=` | Menor ou igual | `mes_vigencia <= 12` |
+| `LIKE` | Contém (texto) | `nome LIKE "%Homologação%"` |
+| `IN` | Em lista | `situacao IN ("Ativo", "Proposta em Edição")` |
+| `BETWEEN` | Entre valores | `ano_realizacao BETWEEN 2025 AND 2026` |
+| `IS NULL` | É nulo | `data_limite IS NULL` |
+| `IS NOT NULL` | Não é nulo | `data_limite IS NOT NULL` |
+
+**Agregações suportadas:**
+
+| Agregação | Descrição | Exemplo |
+|-----------|-----------|---------|
+| `count` | Contagem | "Quantas ações?" |
+| `sum` | Soma | "Qual o total de planejamento?" |
+| `avg` | Média | "Qual a média de planejamento?" |
+| `min` | Mínimo | "Qual o menor planejamento?" |
+| `max` | Máximo | "Qual o maior planejamento?" |
+| `group_by` | Agrupamento | "Quantas ações por situação?" |
+
+**Implementação do `McpConsultaService`:**
+
+```java
+@Service
+public class McpConsultaService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public ConsultaResponse consultar(ConsultaEstruturada consulta) {
+        // 1. Obter a classe Entity correspondente à entidade
+        Class<?> entityClass = getEntityClass(consulta.entidade());
+        
+        // 2. Construir Criteria Query
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<?> query = cb.createQuery();
+        Root<?> root = query.from(entityClass);
+        
+        // 3. Aplicar filtros
+        List<Predicate> predicates = new ArrayList<>();
+        for (Filtro filtro : consulta.filtros()) {
+            Path<?> path = getPath(root, filtro.atributo());
+            // Converter valor de enum se necessário (ex: "Ativo" → 2)
+            Object valorConvertido = converterValor(filtro.atributo(), filtro.valor());
+            predicates.add(montarPredicate(cb, path, filtro.operador(), valorConvertido));
+        }
+        query.where(predicates.toArray(new Predicate[0]));
+        
+        // 4. Aplicar agregação
+        if (consulta.agregacao() != null) {
+            Path<?> atributoAgregacao = getPath(root, consulta.atributoAgregacao());
+            Expression<?> expressao = montarAgregacao(cb, consulta.agregacao(), atributoAgregacao);
+            query.select(expressao);
+        } else {
+            query.select(root);
+        }
+        
+        // 5. Aplicar ordenação
+        if (consulta.ordenacao() != null) {
+            Path<?> orderPath = getPath(root, consulta.ordenacao().atributo());
+            if ("desc".equalsIgnoreCase(consulta.ordenacao().direcao())) {
+                query.orderBy(cb.desc(orderPath));
+            } else {
+                query.orderBy(cb.asc(orderPath));
+            }
+        }
+        
+        // 6. Executar
+        TypedQuery<?> typedQuery = entityManager.createQuery(query);
+        if (consulta.limite() != null) {
+            typedQuery.setMaxResults(consulta.limite());
+        }
+        
+        Object resultado = typedQuery.getSingleResult();
+        
+        // 7. Formatar resposta
+        return formatarResposta(consulta, resultado);
+    }
+}
+```
+
+**DTOs para consulta:**
+
+```java
+// ConsultaRequest.java — recebe pergunta em linguagem natural
+public record ConsultaRequest(
+    @NotBlank String pergunta
+) {}
+
+// ConsultaResponse.java — retorna resposta formatada
+public record ConsultaResponse(
+    String resposta,
+    List<Map<String, Object>> dados,
+    String sqlGerado
+) {}
+
+// ConsultaEstruturada.java — JSON gerado pelo LLM
+public record ConsultaEstruturada(
+    String comando,
+    String entidade,
+    List<Filtro> filtros,
+    String agregacao,
+    String atributoAgregacao,
+    Ordenacao ordenacao,
+    Integer limite
+) {}
+
+public record Filtro(
+    String atributo,
+    String operador,
+    Object valor
+) {}
+
+public record Ordenacao(
+    String atributo,
+    String direcao  // "asc" ou "desc"
+) {}
+```
 
 ### Estratégia de Aprimoramento Contínuo
 
