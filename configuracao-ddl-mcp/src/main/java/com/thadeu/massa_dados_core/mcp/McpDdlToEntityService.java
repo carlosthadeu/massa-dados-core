@@ -3,6 +3,8 @@ package com.thadeu.massa_dados_core.mcp;
 import com.thadeu.massa_dados_core.mcp.dto.AttributeInfo;
 import com.thadeu.massa_dados_core.mcp.dto.DdlRequest;
 import com.thadeu.massa_dados_core.mcp.dto.DdlResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +35,8 @@ import java.util.regex.Pattern;
 @Service
 public class McpDdlToEntityService {
 
+    private static final Logger log = LoggerFactory.getLogger(McpDdlToEntityService.class);
+
     @Value("${entity.classes.path}")
     private String entityClassesPath;
 
@@ -59,26 +63,33 @@ public class McpDdlToEntityService {
      * @throws IllegalArgumentException se o DDL não contiver uma instrução CREATE TABLE válida
      */
     public DdlResponse processDdl(DdlRequest request) throws IOException {
+        log.info("[processDdl] Iniciando processamento de DDL");
         String ddl = request.ddlScript();
 
-                if (ddl == null || ddl.trim().isEmpty()) {
-                    throw new IllegalArgumentException("DDL invalido");
-                }
+        if (ddl == null || ddl.trim().isEmpty()) {
+            log.warn("[processDdl] DDL vazio ou nulo");
+            throw new IllegalArgumentException("DDL invalido");
+        }
 
-                // Extrair nome da tabela
+        // Extrair nome da tabela
         String tableName = extractTableName(ddl);
         if (tableName == null) {
+            log.warn("[processDdl] Não foi possível extrair nome da tabela do DDL");
             throw new IllegalArgumentException("Não foi possível extrair o nome da tabela do DDL");
         }
+        log.debug("[processDdl] Nome da tabela extraída: {}", tableName);
 
         // Extrair colunas
         List<ColumnInfo> columns = extractColumns(ddl);
+        log.debug("[processDdl] Colunas extraídas: {}", columns.size());
 
         // Gerar nome da classe (PascalCase a partir do nome da tabela)
         String className = toPascalCase(tableName);
+        log.debug("[processDdl] Nome da classe gerado: {}", className);
 
         // Gerar código da Entity
         String entityCode = generateEntityCode(className, tableName, columns);
+        log.debug("[processDdl] Código da Entity gerado ({} caracteres)", entityCode.length());
 
         // Salvar arquivo
         String packagePath = "br.gov.bnb.domain.entity";
@@ -88,9 +99,16 @@ public class McpDdlToEntityService {
 
         Path outputFile = outputDir.resolve(className + ".java");
         Files.writeString(outputFile, entityCode);
+        log.info("[processDdl] Arquivo salvo em: {}", outputFile.toAbsolutePath());
 
         // Recompilar Servidor 2
+        log.info("[processDdl] Iniciando compilação do projeto de entidades");
         McpCompileService.CompileResult compileResult = compileService.compile();
+        if (compileResult.success()) {
+            log.info("[processDdl] Compilação bem-sucedida");
+        } else {
+            log.warn("[processDdl] Compilação falhou: {}", compileResult.message());
+        }
 
         // Construir resposta
         List<AttributeInfo> attributes = columns.stream()
@@ -106,6 +124,7 @@ public class McpDdlToEntityService {
                 ))
                 .toList();
 
+        log.info("[processDdl] Processamento concluído para tabela {}", tableName);
         return new DdlResponse(className, entityCode, tableName, attributes, compileResult.success(), compileResult.message());
     }
 

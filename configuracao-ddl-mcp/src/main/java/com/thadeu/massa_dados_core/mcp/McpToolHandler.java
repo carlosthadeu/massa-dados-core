@@ -6,6 +6,8 @@ import com.thadeu.massa_dados_core.mcp.dto.DdlRequest;
 import com.thadeu.massa_dados_core.mcp.dto.DdlResponse;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityRequest;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
@@ -27,6 +29,8 @@ import java.util.Map;
  */
 @Component
 public class McpToolHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(McpToolHandler.class);
 
     private final ObjectMapper objectMapper;
     private final McpDdlToEntityService ddlToEntityService;
@@ -54,18 +58,25 @@ public class McpToolHandler {
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
     public ServerResponse handle(ServerRequest request) {
+        log.info("[handle] Requisição MCP recebida");
         try {
             JsonNode body = objectMapper.readTree(request.servletRequest().getInputStream());
             String method = body.has("method") ? body.get("method").asText() : "";
             JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
             JsonNode id = body.has("id") ? body.get("id") : objectMapper.nullNode();
 
+            log.debug("[handle] Método: {}, id: {}", method, id);
+
             return switch (method) {
                 case "tools/call" -> handleToolCall(params, id);
                 case "tools/list" -> handleToolsList(id);
-                default -> errorResponse(-32601, "Method not found: " + method, id);
+                default -> {
+                    log.warn("[handle] Método não encontrado: {}", method);
+                    yield errorResponse(-32601, "Method not found: " + method, id);
+                }
             };
         } catch (Exception e) {
+            log.error("[handle] Erro interno ao processar requisição", e);
             return errorResponse(-32603, "Internal error: " + e.getMessage(), null);
         }
     }
@@ -81,10 +92,15 @@ public class McpToolHandler {
         String toolName = params.has("name") ? params.get("name").asText() : "";
         JsonNode arguments = params.has("arguments") ? params.get("arguments") : objectMapper.nullNode();
 
+        log.info("[handleToolCall] Ferramenta solicitada: {}", toolName);
+
         return switch (toolName) {
             case "ddl_to_entity" -> handleDdlToEntity(arguments, id);
             case "identify_unknown_entities" -> handleIdentifyUnknownEntities(arguments, id);
-            default -> errorResponse(-32602, "Unknown tool: " + toolName, id);
+            default -> {
+                log.warn("[handleToolCall] Ferramenta desconhecida: {}", toolName);
+                yield errorResponse(-32602, "Unknown tool: " + toolName, id);
+            }
         };
     }
 
@@ -96,11 +112,14 @@ public class McpToolHandler {
      * @return resposta com a Entity gerada
      */
     private ServerResponse handleDdlToEntity(JsonNode arguments, JsonNode id) {
+        log.info("[handleDdlToEntity] Processando DDL");
         try {
             DdlRequest ddlRequest = objectMapper.treeToValue(arguments, DdlRequest.class);
             DdlResponse response = ddlToEntityService.processDdl(ddlRequest);
+            log.info("[handleDdlToEntity] Entity gerada: {}", response.entityClassName());
             return successResponse(response, id);
         } catch (Exception e) {
+            log.error("[handleDdlToEntity] Erro ao processar DDL", e);
             return errorResponse(-32603, "Error processing DDL: " + e.getMessage(), id);
         }
     }
@@ -113,11 +132,15 @@ public class McpToolHandler {
      * @return resposta com tabelas/colunas não reconhecidas
      */
     private ServerResponse handleIdentifyUnknownEntities(JsonNode arguments, JsonNode id) {
+        log.info("[handleIdentifyUnknownEntities] Identificando entidades desconhecidas");
         try {
             UnknownEntityRequest request = objectMapper.treeToValue(arguments, UnknownEntityRequest.class);
             UnknownEntityResponse response = unknownEntityService.identify(request);
+            log.info("[handleIdentifyUnknownEntities] Tabelas faltantes: {}, Colunas faltantes: {}",
+                    response.missingTables().size(), response.missingColumns().size());
             return successResponse(response, id);
         } catch (Exception e) {
+            log.error("[handleIdentifyUnknownEntities] Erro ao identificar entidades", e);
             return errorResponse(-32603, "Error identifying unknown entities: " + e.getMessage(), id);
         }
     }
@@ -129,6 +152,7 @@ public class McpToolHandler {
      * @return lista de ferramentas no formato JSON-RPC
      */
     private ServerResponse handleToolsList(JsonNode id) {
+        log.info("[handleToolsList] Listando ferramentas disponíveis");
         var tools = java.util.List.of(
                 Map.of(
                         "name", "ddl_to_entity",

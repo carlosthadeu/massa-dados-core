@@ -3,6 +3,8 @@ package com.thadeu.massa_dados_core.mcp;
 import com.thadeu.massa_dados_core.mcp.dto.MissingColumnInfo;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityRequest;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +37,8 @@ import java.util.stream.Stream;
 @Service
 public class McpUnknownEntityService {
 
+    private static final Logger log = LoggerFactory.getLogger(McpUnknownEntityService.class);
+
     @Value("${entity.classes.path}")
     private String entityClassesPath;
 
@@ -46,16 +50,21 @@ public class McpUnknownEntityService {
      * @throws IOException se houver erro ao ler os arquivos de entidades
      */
     public UnknownEntityResponse identify(UnknownEntityRequest request) throws IOException {
+        log.info("[identify] Iniciando identificação de entidades desconhecidas");
         String ddl = request.ddlScript();
 
         List<String> ddlTables = extractTableNames(ddl);
+        log.debug("[identify] Tabelas extraídas do DDL: {}", ddlTables);
         List<TableColumnInfo> ddlColumns = extractAllColumns(ddl);
+        log.debug("[identify] Colunas extraídas do DDL: {}", ddlColumns.size());
 
         List<String> existingTables = getExistingTables();
+        log.debug("[identify] Tabelas existentes: {}", existingTables);
 
         List<String> missingTables = ddlTables.stream()
                 .filter(t -> !existingTables.contains(t))
                 .collect(Collectors.toList());
+        log.info("[identify] Tabelas faltantes: {}", missingTables);
 
         List<MissingColumnInfo> missingColumns = new ArrayList<>();
         for (TableColumnInfo tableCol : ddlColumns) {
@@ -73,7 +82,9 @@ public class McpUnknownEntityService {
                 }
             }
         }
+        log.info("[identify] Colunas faltantes: {}", missingColumns.size());
 
+        log.info("[identify] Identificação concluída");
         return new UnknownEntityResponse(missingTables, missingColumns);
     }
 
