@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,6 +18,7 @@ import java.util.Map;
  * <p>Responsabilidades:
  * <ul>
  *   <li>Expor o endpoint {@code POST /mcp} para comunicação JSON-RPC</li>
+ *   <li>Expor o endpoint {@code GET /mcp} para listar ferramentas (inicialização do cliente)</li>
  *   <li>Delegar requisições para o {@link McpToolHandler}</li>
  * </ul>
  *
@@ -71,5 +73,16 @@ public class McpServerConfig {
             log.error("[handleMcp] Erro interno ao processar requisição", e);
             return handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null);
         }
+    }
+
+    /**
+     * Endpoint GET para listar ferramentas (usado pelo cliente MCP durante inicialização).
+     *
+     * @return resposta HTTP com lista de ferramentas no formato JSON-RPC
+     */
+    @GetMapping("/mcp")
+    public ResponseEntity<Map<String, Object>> handleMcpGet() {
+        log.info("[handleMcpGet] Requisição GET recebida em /mcp - retornando lista de ferramentas");
+        return handler.handleToolsList(null);
     }
 }
