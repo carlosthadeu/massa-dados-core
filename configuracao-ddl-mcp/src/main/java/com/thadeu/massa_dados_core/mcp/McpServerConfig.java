@@ -10,7 +10,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -27,13 +26,13 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Responsabilidades:
  * <ul>
- *   <li>Expor o endpoint {@code GET /mcp} para estabelecer canal SSE via {@link StreamingResponseBody}</li>
+ *   <li>Expor o endpoint {@code GET /mcp} para estabelecer canal SSE</li>
  *   <li>Expor o endpoint {@code POST /mcp} para receber requisições JSON-RPC</li>
  *   <li>Delegar requisições para o {@link McpToolHandler}</li>
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 13.0
+ * @version 14.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -63,19 +62,19 @@ public class McpServerConfig {
     }
 
     /**
-     * Endpoint GET que estabelece o canal SSE usando {@link StreamingResponseBody}.
+     * Endpoint GET que estabelece o canal SSE.
      *
-     * <p>O Spring gerencia corretamente a resposta assíncrona, liberando a thread
-     * do container enquanto mantém a conexão aberta.</p>
+     * <p>Escreve o handshake diretamente no OutputStream do HttpServletResponse
+     * antes de retornar, garantindo que o cliente receba o evento endpoint imediatamente.</p>
      *
-     * @param response objeto HttpServletResponse para configurar headers manualmente
-     * @return {@link StreamingResponseBody} que escreve o handshake e mantém a conexão
+     * @param response objeto HttpServletResponse para escrever o stream SSE
+     * @return {@link DeferredResult} que mantém a conexão aberta
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public StreamingResponseBody connect(HttpServletResponse response) {
+    public DeferredResult<Void> connect(HttpServletResponse response) {
         String sessionId = UUID.randomUUID().toString();
 
-        // Configura headers SSE manualmente antes de retornar o StreamingResponseBody
+        // Configura headers SSE manualmente
         response.setContentType("text/event-stream");
         response.setCharacterEncoding("UTF-8");
         response.setHeader("Cache-Control", "no-cache");
@@ -87,7 +86,9 @@ public class McpServerConfig {
         // Monta o endpoint que o ChatMCP usará para enviar os comandos POST
         String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
-        return outputStream -> {
+        // Escreve o handshake diretamente no OutputStream antes de retornar
+        try {
+            OutputStream outputStream = response.getOutputStream();
             activeStreams.put(sessionId, outputStream);
             log.info("[connect] OutputStream registrado para sessão {}", sessionId);
 
@@ -98,37 +99,43 @@ public class McpServerConfig {
                 outputStream.flush();
             }
             log.info("[connect] Handshake inicial 'endpoint' enviado com sucesso para sessão {}", sessionId);
+        } catch (IOException e) {
+            log.error("[connect] Erro ao enviar handshake para sessão {}", sessionId, e);
+            activeStreams.remove(sessionId);
+            DeferredResult<Void> errorResult = new DeferredResult<>();
+            errorResult.setErrorResult(e);
+            return errorResult;
+        }
 
-            // Agenda heartbeats a cada 15 segundos para manter a conexão viva
-            heartbeatExecutor.scheduleAtFixedRate(() -> {
-                OutputStream os = activeStreams.get(sessionId);
-                if (os == null) {
-                    return;
-                }
-                try {
-                    synchronized (os) {
-                        // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
-                        os.write(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
-                        os.flush();
-                    }
-                } catch (IOException e) {
-                    log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
-                    activeStreams.remove(sessionId);
-                }
-            }, 15, 15, TimeUnit.SECONDS);
+        // Cria DeferredResult com timeout de 30 minutos
+        DeferredResult<Void> deferredResult = new DeferredResult<>(1_800_000L);
 
-            // Mantém a conexão aberta até o cliente desconectar
-            try {
-                while (activeStreams.containsKey(sessionId)) {
-                    Thread.sleep(1000);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {
-                activeStreams.remove(sessionId);
-                log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+        // Agenda heartbeats a cada 15 segundos para manter a conexão viva
+        heartbeatExecutor.scheduleAtFixedRate(() -> {
+            OutputStream os = activeStreams.get(sessionId);
+            if (os == null) {
+                return;
             }
-        };
+            try {
+                synchronized (os) {
+                    // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
+                    os.write(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+            } catch (IOException e) {
+                log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
+                activeStreams.remove(sessionId);
+                deferredResult.setResult(null);
+            }
+        }, 15, 15, TimeUnit.SECONDS);
+
+        // Callback quando a conexão é finalizada (cliente desconecta ou timeout)
+        deferredResult.onCompletion(() -> {
+            log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+            activeStreams.remove(sessionId);
+        });
+
+        return deferredResult;
     }
 
     /**
