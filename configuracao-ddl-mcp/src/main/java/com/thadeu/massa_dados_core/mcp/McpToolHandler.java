@@ -196,11 +196,10 @@ public class McpToolHandler {
      * @return resposta HTTP 400 com corpo JSON-RPC de erro
      */
     private ServerResponse errorResponse(int code, String message, JsonNode id) {
-        var body = Map.of(
-                "jsonrpc", "2.0",
-                "error", Map.of("code", code, "message", message),
-                "id", id
-        );
+        var body = new java.util.HashMap<String, Object>();
+        body.put("jsonrpc", "2.0");
+        body.put("error", Map.of("code", code, "message", message));
+        body.put("id", id);
         return ServerResponse.status(400).body(body);
     }
 
