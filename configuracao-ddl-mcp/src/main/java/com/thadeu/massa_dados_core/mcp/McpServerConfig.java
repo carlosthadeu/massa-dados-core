@@ -94,9 +94,12 @@ public class McpServerConfig {
             // O evento DEVE se chamar "endpoint" e o dado deve ser a URL para POST
             String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
-            emitter.send(SseEmitter.event()
-                    .name("endpoint") // IMPORTANTE: O Dart procura exatamente por esse nome
-                    .data(messageEndpointUrl));
+            // Envia manualmente no formato SSE esperado pelo cliente Dart
+            // O formato correto é:
+            // event: endpoint
+            // data: http://localhost:8081/mcp?sessionId=xxx
+            // 
+            emitter.send("event: endpoint\ndata: " + messageEndpointUrl + "\n\n");
 
             log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
         } catch (IOException e) {
@@ -155,9 +158,8 @@ public class McpServerConfig {
             // Enviar resposta via SSE no evento "message"
             if (response.getBody() != null) {
                 String responseJson = objectMapper.writeValueAsString(response.getBody());
-                emitter.send(SseEmitter.event()
-                        .name("message")
-                        .data(responseJson));
+                // Envia manualmente no formato SSE esperado pelo cliente Dart
+                emitter.send("event: message\ndata: " + responseJson + "\n\n");
                 log.debug("[handlePost] Resposta enviada via SSE para sessão {}", sessionId);
             }
 
@@ -168,9 +170,7 @@ public class McpServerConfig {
                 Map<String, Object> errorBody = handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null).getBody();
                 if (errorBody != null) {
                     String errorJson = objectMapper.writeValueAsString(errorBody);
-                    emitter.send(SseEmitter.event()
-                            .name("message")
-                            .data(errorJson));
+                    emitter.send("event: message\ndata: " + errorJson + "\n\n");
                 }
             } catch (IOException ex) {
                 log.error("[handlePost] Erro ao enviar resposta de erro via SSE", ex);
