@@ -2,12 +2,12 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -49,20 +49,22 @@ public class McpServerConfig {
     /**
      * Endpoint MCP que recebe requisições JSON-RPC via POST.
      *
-     * @param bodyString corpo da requisição como string JSON
+     * @param request requisição HTTP
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody(required = false) String bodyString) {
+    public ResponseEntity<Map<String, Object>> handleMcp(HttpServletRequest request) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
-        log.debug("[handleMcp] Corpo recebido: {}", bodyString);
-
-        if (bodyString == null || bodyString.trim().isEmpty()) {
-            log.warn("[handleMcp] Corpo da requisição vazio");
-            return handler.errorResponse(-32602, "Corpo da requisição não pode ser vazio", null);
-        }
-
         try {
+            // Ler o corpo da requisição como string
+            String bodyString = new String(request.getInputStream().readAllBytes());
+            log.debug("[handleMcp] Corpo recebido: {}", bodyString);
+
+            if (bodyString == null || bodyString.trim().isEmpty()) {
+                log.warn("[handleMcp] Corpo da requisição vazio");
+                return handler.errorResponse(-32602, "Corpo da requisição não pode ser vazio", null);
+            }
+
             JsonNode body = objectMapper.readTree(bodyString);
             String method = body.has("method") ? body.get("method").asText() : "";
             JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
