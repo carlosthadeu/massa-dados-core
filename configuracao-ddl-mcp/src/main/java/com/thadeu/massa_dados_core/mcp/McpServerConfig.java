@@ -1,14 +1,15 @@
 package com.thadeu.massa_dados_core.mcp;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import static org.springframework.web.servlet.function.RequestPredicates.POST;
-import static org.springframework.web.servlet.function.RouterFunctions.route;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
 
 /**
  * Configuração do endpoint MCP para o servidor configuracao-ddl-mcp.
@@ -22,20 +23,53 @@ import static org.springframework.web.servlet.function.RouterFunctions.route;
  * @author Thadeu Garrido
  * @version 1.0
  */
-@Configuration
+@RestController
 public class McpServerConfig {
 
     private static final Logger log = LoggerFactory.getLogger(McpServerConfig.class);
 
+    private final McpToolHandler handler;
+    private final ObjectMapper objectMapper;
+
     /**
-     * Cria a rota para o endpoint MCP.
+     * Construtor com injeção de dependências.
      *
-     * @param handler manipulador de requisições MCP
-     * @return função de roteamento que mapeia POST /mcp para o handler
+     * @param handler      manipulador de requisições MCP
+     * @param objectMapper serializador JSON
      */
-    @Bean
-    public RouterFunction<ServerResponse> mcpRouter(McpToolHandler handler) {
-        log.info("[mcpRouter] Configurando endpoint MCP em POST /mcp");
-        return route(POST("/mcp"), handler::handle);
+    public McpServerConfig(McpToolHandler handler, ObjectMapper objectMapper) {
+        this.handler = handler;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Endpoint MCP que recebe requisições JSON-RPC via POST.
+     *
+     * @param request requisição HTTP
+     * @return resposta HTTP com resultado ou erro JSON-RPC
+     */
+    @PostMapping("/mcp")
+    public ResponseEntity<Map<String, Object>> handleMcp(HttpServletRequest request) {
+        log.info("[handleMcp] Requisição MCP recebida em /mcp");
+        try {
+            JsonNode body = objectMapper.readTree(request.getInputStream());
+            String method = body.has("method") ? body.get("method").asText() : "";
+            JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
+            JsonNode id = body.has("id") ? body.get("id") : null;
+
+            log.debug("[handleMcp] Método: {}, id: {}", method, id);
+
+            return switch (method) {
+                case "tools/call" -> handler.handleToolCall(params, id);
+                case "tools/list" -> handler.handleToolsList(id);
+                default -> {
+                    log.warn("[handleMcp] Método não encontrado: {}", method);
+                    yield handler.errorResponse(-32601, "Method not found: " + method, id);
+                }
+            };
+        } catch (Exception e) {
+            log.error("[handleMcp] Erro interno ao processar requisição", e);
+            return handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null);
+        }
     }
 }

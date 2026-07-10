@@ -8,10 +8,11 @@ import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityRequest;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.function.ServerRequest;
-import org.springframework.web.servlet.function.ServerResponse;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -52,43 +53,13 @@ public class McpToolHandler {
     }
 
     /**
-     * Processa uma requisição HTTP para o endpoint MCP.
-     *
-     * @param request requisição HTTP contendo JSON-RPC
-     * @return resposta HTTP com resultado ou erro JSON-RPC
-     */
-    public ServerResponse handle(ServerRequest request) {
-        log.info("[handle] Requisição MCP recebida");
-        try {
-            JsonNode body = objectMapper.readTree(request.servletRequest().getInputStream());
-            String method = body.has("method") ? body.get("method").asText() : "";
-            JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
-            JsonNode id = body.has("id") ? body.get("id") : null;
-
-            log.debug("[handle] Método: {}, id: {}", method, id);
-
-            return switch (method) {
-                case "tools/call" -> handleToolCall(params, id);
-                case "tools/list" -> handleToolsList(id);
-                default -> {
-                    log.warn("[handle] Método não encontrado: {}", method);
-                    yield errorResponse(-32601, "Method not found: " + method, id);
-                }
-            };
-        } catch (Exception e) {
-            log.error("[handle] Erro interno ao processar requisição", e);
-            return errorResponse(-32603, "Internal error: " + e.getMessage(), null);
-        }
-    }
-
-    /**
      * Roteia uma chamada de ferramenta para o manipulador adequado.
      *
      * @param params parâmetros da chamada
      * @param id     identificador da requisição JSON-RPC
      * @return resposta da ferramenta
      */
-    private ServerResponse handleToolCall(JsonNode params, JsonNode id) {
+    public ResponseEntity<Map<String, Object>> handleToolCall(JsonNode params, JsonNode id) {
         String toolName = params.has("name") ? params.get("name").asText() : "";
         JsonNode arguments = params.has("arguments") ? params.get("arguments") : objectMapper.nullNode();
 
@@ -111,7 +82,7 @@ public class McpToolHandler {
      * @param id        identificador da requisição
      * @return resposta com a Entity gerada
      */
-    private ServerResponse handleDdlToEntity(JsonNode arguments, JsonNode id) {
+    private ResponseEntity<Map<String, Object>> handleDdlToEntity(JsonNode arguments, JsonNode id) {
         log.info("[handleDdlToEntity] Processando DDL");
         try {
             DdlRequest ddlRequest = objectMapper.treeToValue(arguments, DdlRequest.class);
@@ -131,7 +102,7 @@ public class McpToolHandler {
      * @param id        identificador da requisição
      * @return resposta com tabelas/colunas não reconhecidas
      */
-    private ServerResponse handleIdentifyUnknownEntities(JsonNode arguments, JsonNode id) {
+    private ResponseEntity<Map<String, Object>> handleIdentifyUnknownEntities(JsonNode arguments, JsonNode id) {
         log.info("[handleIdentifyUnknownEntities] Identificando entidades desconhecidas");
         try {
             UnknownEntityRequest request = objectMapper.treeToValue(arguments, UnknownEntityRequest.class);
@@ -151,7 +122,7 @@ public class McpToolHandler {
      * @param id identificador da requisição
      * @return lista de ferramentas no formato JSON-RPC
      */
-    private ServerResponse handleToolsList(JsonNode id) {
+    public ResponseEntity<Map<String, Object>> handleToolsList(JsonNode id) {
         log.info("[handleToolsList] Listando ferramentas disponíveis");
         var tools = java.util.List.of(
                 Map.of(
@@ -184,12 +155,12 @@ public class McpToolHandler {
                 )
         );
 
-                // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
-        var body = new java.util.HashMap<String, Object>();
+        // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
+        var body = new HashMap<String, Object>();
         body.put("jsonrpc", "2.0");
         body.put("result", Map.of("tools", tools));
         body.put("id", id);
-        return ServerResponse.ok().body(body);
+        return ResponseEntity.ok(body);
     }
 
     /**
@@ -201,12 +172,12 @@ public class McpToolHandler {
      * @param id     identificador da requisição
      * @return resposta HTTP 200 com corpo JSON-RPC
      */
-    private ServerResponse successResponse(Object result, JsonNode id) {
-        var body = new java.util.HashMap<String, Object>();
+    private ResponseEntity<Map<String, Object>> successResponse(Object result, JsonNode id) {
+        var body = new HashMap<String, Object>();
         body.put("jsonrpc", "2.0");
         body.put("result", Map.of("content", java.util.List.of(Map.of("type", "text", "text", toJsonString(result)))));
         body.put("id", id);
-        return ServerResponse.ok().body(body);
+        return ResponseEntity.ok(body);
     }
 
     /**
@@ -217,12 +188,12 @@ public class McpToolHandler {
      * @param id      identificador da requisição (pode ser null)
      * @return resposta HTTP 400 com corpo JSON-RPC de erro
      */
-    private ServerResponse errorResponse(int code, String message, JsonNode id) {
-        var body = new java.util.HashMap<String, Object>();
+    public ResponseEntity<Map<String, Object>> errorResponse(int code, String message, JsonNode id) {
+        var body = new HashMap<String, Object>();
         body.put("jsonrpc", "2.0");
         body.put("error", Map.of("code", code, "message", message));
         body.put("id", id); // id pode ser null, HashMap aceita null
-        return ServerResponse.status(400).body(body);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     /**
