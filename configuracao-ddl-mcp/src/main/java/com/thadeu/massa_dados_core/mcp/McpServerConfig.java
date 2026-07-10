@@ -2,28 +2,18 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Configuração do endpoint MCP para o servidor configuracao-ddl-mcp.
@@ -36,10 +26,11 @@ import java.util.concurrent.Executors;
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 4.0
+ * @version 5.0
  */
 @RestController
 @RequestMapping("/mcp")
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class McpServerConfig {
 
     private static final Logger log = LoggerFactory.getLogger(McpServerConfig.class);
@@ -48,14 +39,9 @@ public class McpServerConfig {
     private final ObjectMapper objectMapper;
 
     /**
-     * Mapa de saídas SSE, um por sessão (identificado pelo sessionId).
+     * Mapa de emissores SseEmitter ativos por sessionId.
      */
-    private final ConcurrentHashMap<String, OutputStream> sseOutputs = new ConcurrentHashMap<>();
-
-    /**
-     * Executor para manter a conexão SSE aberta.
-     */
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ConcurrentHashMap<String, SseEmitter> sseEmitters = new ConcurrentHashMap<>();
 
     /**
      * Construtor com injeção de dependências.
@@ -69,56 +55,52 @@ public class McpServerConfig {
     }
 
     /**
-     * Endpoint GET que estabelece um canal SSE (Server-Sent Events).
+     * Endpoint GET que estabelece um canal SSE estável usando SseEmitter.
      *
      * <p>O primeiro evento enviado contém a URL para onde o cliente deve
      * enviar os POSTs subsequentes (endpoint de mensagens).</p>
      *
-     * @param response resposta HTTP para escrever o stream SSE
-     * @return StreamingResponseBody para manter a conexão aberta
+     * @return emissor SSE
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public StreamingResponseBody connect(HttpServletResponse response) {
-        log.info("[connect] Nova conexão SSE estabelecida");
-
-        response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        response.setHeader("Cache-Control", "no-cache");
-        response.setHeader("Connection", "keep-alive");
-        response.setHeader("X-Accel-Buffering", "no");
-
+    public SseEmitter connect() {
         String sessionId = UUID.randomUUID().toString();
+        log.info("[connect] Nova conexão SSE estabelecida para sessão {}", sessionId);
 
-        return outputStream -> {
-            sseOutputs.put(sessionId, outputStream);
+        // Timeout de 30 minutos (1800000ms) para evitar que a IA desconecte no meio de uma análise longa
+        SseEmitter emitter = new SseEmitter(1800000L);
 
-            try {
-                // Envia o handshake inicial imediatamente para o ChatMCP registrar o endpoint
-                String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
-                String endpointEvent = "event: endpoint\ndata: " + messageEndpointUrl + "\n\n";
-                outputStream.write(endpointEvent.getBytes(StandardCharsets.UTF_8));
-                outputStream.flush();
-                log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
+        sseEmitters.put(sessionId, emitter);
 
-                // Mantém a conexão aberta enviando keep-alive a cada 30 segundos
-                while (true) {
-                    try {
-                        Thread.sleep(30000);
-                        String keepAlive = ": keepalive\n\n";
-                        outputStream.write(keepAlive.getBytes(StandardCharsets.UTF_8));
-                        outputStream.flush();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            } catch (IOException e) {
-                log.warn("[connect] Conexão SSE interrompida para sessão {}: {}", sessionId, e.getMessage());
-            } finally {
-                sseOutputs.remove(sessionId);
-                log.info("[connect] Conexão SSE encerrada para sessão {}", sessionId);
-            }
-        };
+        // Callbacks para limpar o mapa quando a conexão cair ou expirar
+        emitter.onCompletion(() -> {
+            log.info("[connect] Conexão SSE concluída para sessão {}", sessionId);
+            sseEmitters.remove(sessionId);
+        });
+        emitter.onTimeout(() -> {
+            log.warn("[connect] Conexão SSE expirou para sessão {}", sessionId);
+            sseEmitters.remove(sessionId);
+        });
+        emitter.onError(ex -> {
+            log.error("[connect] Erro na conexão SSE para sessão {}", sessionId, ex);
+            sseEmitters.remove(sessionId);
+        });
+
+        try {
+            // Envia o handshake inicial exigido pelo protocolo MCP
+            String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
+
+            emitter.send(SseEmitter.event()
+                    .name("endpoint") // O ChatMCP busca estritamente por este nome de evento
+                    .data(messageEndpointUrl));
+
+            log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
+        } catch (IOException e) {
+            log.warn("[connect] Erro ao enviar handshake inicial para sessão {}", sessionId, e);
+            emitter.completeWithError(e);
+        }
+
+        return emitter;
     }
 
     /**
@@ -138,9 +120,10 @@ public class McpServerConfig {
 
         log.info("[handlePost] Mensagem recebida para sessão {}", sessionId);
 
-        OutputStream outputStream = sseOutputs.get(sessionId);
-        if (outputStream == null) {
-            log.warn("[handlePost] Sessão não encontrada: {}", sessionId);
+        // Busca o SseEmitter correto para responder de volta na mesma sessão
+        SseEmitter emitter = sseEmitters.get(sessionId);
+        if (emitter == null) {
+            log.warn("[handlePost] Sessão não encontrada ou expirada: {}", sessionId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
@@ -166,15 +149,15 @@ public class McpServerConfig {
                 }
             };
 
-            // Enviar resposta via SSE no evento "message"
+            // Envia a resposta de volta ao canal de Stream aberto no evento "message"
             if (response.getBody() != null) {
                 String responseJson = objectMapper.writeValueAsString(response.getBody());
-                String messageEvent = "event: message\ndata: " + responseJson + "\n\n";
-                synchronized (outputStream) {
-                    outputStream.write(messageEvent.getBytes(StandardCharsets.UTF_8));
-                    outputStream.flush();
-                }
-                log.debug("[handlePost] Resposta enviada via SSE para sessão {}", sessionId);
+
+                emitter.send(SseEmitter.event()
+                        .name("message") // Exigido pelo protocolo MCP para respostas JSON-RPC
+                        .data(responseJson));
+
+                log.debug("[handlePost] Resposta do método {} enviada via SSE para sessão {}", method, sessionId);
             }
 
             return ResponseEntity.accepted().build();
@@ -184,11 +167,7 @@ public class McpServerConfig {
                 Map<String, Object> errorBody = handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null).getBody();
                 if (errorBody != null) {
                     String errorJson = objectMapper.writeValueAsString(errorBody);
-                    String errorEvent = "event: message\ndata: " + errorJson + "\n\n";
-                    synchronized (outputStream) {
-                        outputStream.write(errorEvent.getBytes(StandardCharsets.UTF_8));
-                        outputStream.flush();
-                    }
+                    emitter.send(SseEmitter.event().name("message").data(errorJson));
                 }
             } catch (IOException ex) {
                 log.error("[handlePost] Erro ao enviar resposta de erro via SSE", ex);
