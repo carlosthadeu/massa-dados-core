@@ -2,10 +2,10 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -55,17 +55,25 @@ public class McpServerConfig {
     }
 
     /**
-     * Endpoint GET que estabelece um canal SSE estável usando SseEmitter.
+     * Endpoint GET que estabelece um canal SSE estável ignorando restrições do Content Negotiation.
      *
      * <p>O primeiro evento enviado contém a URL para onde o cliente deve
      * enviar os POSTs subsequentes (endpoint de mensagens).</p>
      *
+     * @param response objeto HttpServletResponse para forçar cabeçalhos SSE manualmente
      * @return emissor SSE
      */
-    @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter connect() {
+    @GetMapping
+    public SseEmitter connect(HttpServletResponse response) {
         String sessionId = UUID.randomUUID().toString();
         log.info("[connect] Nova conexão SSE estabelecida para sessão {}", sessionId);
+
+        // 1. Força os cabeçalhos HTTP brutos exigidos pelo SSE e pelo ChatMCP
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        response.setHeader("X-Accel-Buffering", "no"); // Impede proxy/nginx de segurar o stream
 
         // Timeout de 30 minutos (1800000ms) para evitar que a IA desconecte no meio de uma análise longa
         SseEmitter emitter = new SseEmitter(1800000L);
@@ -87,16 +95,16 @@ public class McpServerConfig {
         });
 
         try {
-            // Envia o handshake inicial exigido pelo protocolo MCP
+            // 2. Envia o handshake inicial exigido pelo protocolo MCP
             String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
             emitter.send(SseEmitter.event()
                     .name("endpoint") // O ChatMCP busca estritamente por este nome de evento
                     .data(messageEndpointUrl));
 
-            log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
+            log.info("[connect] Conexão SSE estabelecida com sucesso via HttpServletResponse. Sessão: {}", sessionId);
         } catch (IOException e) {
-            log.warn("[connect] Erro ao enviar handshake inicial para sessão {}", sessionId, e);
+            log.warn("[connect] Falha ao enviar evento 'endpoint' inicial: {}", e.getMessage());
             emitter.completeWithError(e);
         }
 
