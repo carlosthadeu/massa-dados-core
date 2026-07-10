@@ -1,5 +1,7 @@
 package com.thadeu.massa_dados_core.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -16,6 +18,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
+    private static final Logger log = LoggerFactory.getLogger(CorsConfig.class);
+
     /**
      * Configura as regras de CORS permitindo qualquer origem.
      *
@@ -23,6 +27,7 @@ public class CorsConfig implements WebMvcConfigurer {
      */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        log.info("[addCorsMappings] Configurando CORS para permitir todas as origens");
         registry.addMapping("/**")
                 .allowedOrigins("*")
                 .allowedMethods("POST", "OPTIONS")

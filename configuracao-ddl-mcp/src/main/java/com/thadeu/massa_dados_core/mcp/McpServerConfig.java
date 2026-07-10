@@ -1,5 +1,7 @@
 package com.thadeu.massa_dados_core.mcp;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
@@ -23,6 +25,8 @@ import static org.springframework.web.servlet.function.RouterFunctions.route;
 @Configuration
 public class McpServerConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(McpServerConfig.class);
+
     /**
      * Cria a rota para o endpoint MCP.
      *
@@ -31,6 +35,7 @@ public class McpServerConfig {
      */
     @Bean
     public RouterFunction<ServerResponse> mcpRouter(McpToolHandler handler) {
+        log.info("[mcpRouter] Configurando endpoint MCP em POST /mcp");
         return route(POST("/mcp"), handler::handle);
     }
 }
