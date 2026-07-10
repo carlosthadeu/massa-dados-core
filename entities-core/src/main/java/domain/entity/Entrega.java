@@ -3,7 +3,7 @@ package domain.entity;
 import domain.enums.SituacaoEtapa;
 import org.hibernate.annotations.Nationalized;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;

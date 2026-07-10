@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication(scanBasePackages = {
     "com.thadeu.massa_dados_core",
-    "br.gov.bnb.domain.entity"
+    "domain.entity"
 })
 public class App {
 

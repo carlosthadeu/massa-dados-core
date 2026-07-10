@@ -17,6 +17,7 @@ build/
 
 # Logs
 *.log
+logs/
 
 # OS-specific
 .DS_Store

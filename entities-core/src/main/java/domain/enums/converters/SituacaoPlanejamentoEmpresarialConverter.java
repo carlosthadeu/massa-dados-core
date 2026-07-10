@@ -1,6 +1,6 @@
 package domain.enums.converters;
 
-import javax.persistence.AttributeConverter;
+import jakarta.persistence.AttributeConverter;
 
 import domain.enums.SituacaoPlanejamentoEmpresarial;
 

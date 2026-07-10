@@ -3,10 +3,12 @@ package com.thadeu.massa_dados_core.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thadeu.massa_dados_core.mcp.dto.*;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -16,18 +18,21 @@ public class McpToolHandler {
     private final McpEntityMetadataService metadataService;
     private final McpMapeamentoSemanticoService mapeamentoSemanticoService;
     private final McpConsultaService consultaService;
-    private final McpDemandaService demandaService;
+        private final McpDemandaService demandaService;
+    private final EntityManager entityManager;
 
     public McpToolHandler(ObjectMapper objectMapper,
                           McpEntityMetadataService metadataService,
                           McpMapeamentoSemanticoService mapeamentoSemanticoService,
                           McpConsultaService consultaService,
-                          McpDemandaService demandaService) {
+                          McpDemandaService demandaService,
+                          EntityManager entityManager) {
         this.objectMapper = objectMapper;
         this.metadataService = metadataService;
         this.mapeamentoSemanticoService = mapeamentoSemanticoService;
         this.consultaService = consultaService;
         this.demandaService = demandaService;
+        this.entityManager = entityManager;
     }
 
     public ServerResponse handle(ServerRequest request) {
@@ -272,143 +277,148 @@ public class McpToolHandler {
     }
 
     private ServerResponse handleToolsList(JsonNode id) {
-        var tools = java.util.List.of(
-                Map.of(
-                        "name", "get_entity_metadata",
-                        "description", "Retorna metadados de uma classe Entity JPA (nome da tabela, atributos, relacionamentos)",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "className", Map.of(
-                                                "type", "string",
-                                                "description", "Nome completo da classe (ex: br.gov.bnb.domain.entity.Portfolio)"
-                                        )
-                                ),
-                                "required", java.util.List.of("className")
-                        )
-                ),
-                Map.of(
-                        "name", "get_mapeamento_semantico",
-                        "description", "Retorna o mapeamento semântico completo (entidades, atributos, valores de enum, sinônimos) para interpretação de comandos em linguagem natural",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(),
-                                "required", java.util.List.of()
-                        )
-                ),
-                Map.of(
-                        "name", "consultar_dados",
-                        "description", "Executa uma consulta estruturada no banco de dados e retorna os resultados",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "comando", Map.of(
-                                                "type", "string",
-                                                "description", "Tipo de comando: 'consultar'"
-                                        ),
-                                        "entidade", Map.of(
-                                                "type", "string",
-                                                "description", "Nome da entidade no mapeamento semântico (ex: acao_estrategica, portfolio)"
-                                        ),
-                                        "filtros", Map.of(
-                                                "type", "array",
-                                                "description", "Lista de filtros",
-                                                "items", Map.of(
-                                                        "type", "object",
-                                                        "properties", Map.of(
-                                                                "atributo", Map.of("type", "string"),
-                                                                "operador", Map.of("type", "string"),
-                                                                "valor", Map.of("type", "string")
-                                                        )
-                                                )
-                                        ),
-                                        "agregacao", Map.of(
-                                                "type", "string",
-                                                "description", "Tipo de agregação: count, sum, avg, min, max"
-                                        ),
-                                        "atributoAgregacao", Map.of(
-                                                "type", "string",
-                                                "description", "Atributo para agregação"
-                                        ),
-                                        "ordenacao", Map.of(
-                                                "type", "object",
-                                                "properties", Map.of(
-                                                        "atributo", Map.of("type", "string"),
-                                                        "direcao", Map.of("type", "string")
-                                                )
-                                        ),
-                                        "limite", Map.of(
-                                                "type", "integer",
-                                                "description", "Limite de resultados"
-                                        )
-                                ),
-                                "required", java.util.List.of("comando", "entidade")
-                        )
-                ),
-                Map.of(
-                        "name", "listar_demandas",
-                        "description", "Lista as demandas pendentes de configuração",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(),
-                                "required", java.util.List.of()
-                        )
-                ),
-                Map.of(
-                        "name", "resolver_demanda",
-                        "description", "Marca uma demanda como resolvida",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "id", Map.of(
-                                                "type", "string",
-                                                "description", "ID da demanda (nome do arquivo)"
-                                        )
-                                ),
-                                "required", java.util.List.of("id")
-                        )
-                ),
-                Map.of(
-                        "name", "detalhar_demanda",
-                        "description", "Retorna detalhes completos de uma demanda específica",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "id", Map.of(
-                                                "type", "string",
-                                                "description", "ID da demanda (nome do arquivo)"
-                                        )
-                                ),
-                                "required", java.util.List.of("id")
-                        )
-                ),
-                Map.of(
-                        "name", "criar_massa",
-                        "description", "Cria massa de dados no banco a partir de um JSON estruturado com entidades, atributos e relacionamentos",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "entidades", Map.of(
-                                                "type", "array",
-                                                "description", "Lista de entidades a serem criadas",
-                                                "items", Map.of(
-                                                        "type", "object",
-                                                        "properties", Map.of(
-                                                                "tipo", Map.of("type", "string", "description", "Tipo da entidade (ex: portfolio, acao_estrategica)"),
-                                                                "dados", Map.of("type", "object", "description", "Atributos da entidade"),
-                                                                "filhos", Map.of("type", "array", "description", "Entidades filhas (ex: etapas dentro de ação)")
-                                                        )
-                                                )
-                                        )
-                                ),
-                                "required", java.util.List.of("entidades")
-                        )
-                )
-        );
+            var tools = java.util.List.of(
+                    Map.of(
+                            "name", "get_entity_metadata",
+                            "description", "Retorna metadados de uma classe Entity JPA (nome da tabela, atributos, relacionamentos)",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "className", Map.of(
+                                                    "type", "string",
+                                                    "description", "Nome completo da classe (ex: br.gov.bnb.domain.entity.Portfolio)"
+                                            )
+                                    ),
+                                    "required", java.util.List.of("className")
+                            )
+                    ),
+                    Map.of(
+                            "name", "get_mapeamento_semantico",
+                            "description", "Retorna o mapeamento semântico completo (entidades, atributos, valores de enum, sinônimos) para interpretação de comandos em linguagem natural",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(),
+                                    "required", java.util.List.of()
+                            )
+                    ),
+                    Map.of(
+                            "name", "consultar_dados",
+                            "description", "Executa uma consulta estruturada no banco de dados e retorna os resultados",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "comando", Map.of(
+                                                    "type", "string",
+                                                    "description", "Tipo de comando: 'consultar'"
+                                            ),
+                                            "entidade", Map.of(
+                                                    "type", "string",
+                                                    "description", "Nome da entidade no mapeamento semântico (ex: acao_estrategica, portfolio)"
+                                            ),
+                                            "filtros", Map.of(
+                                                    "type", "array",
+                                                    "description", "Lista de filtros",
+                                                    "items", Map.of(
+                                                            "type", "object",
+                                                            "properties", Map.of(
+                                                                    "atributo", Map.of("type", "string"),
+                                                                    "operador", Map.of("type", "string"),
+                                                                    "valor", Map.of("type", "string")
+                                                            )
+                                                    )
+                                            ),
+                                            "agregacao", Map.of(
+                                                    "type", "string",
+                                                    "description", "Tipo de agregação: count, sum, avg, min, max"
+                                            ),
+                                            "atributoAgregacao", Map.of(
+                                                    "type", "string",
+                                                    "description", "Atributo para agregação"
+                                            ),
+                                            "ordenacao", Map.of(
+                                                    "type", "object",
+                                                    "properties", Map.of(
+                                                            "atributo", Map.of("type", "string"),
+                                                            "direcao", Map.of("type", "string")
+                                                    )
+                                            ),
+                                            "limite", Map.of(
+                                                    "type", "integer",
+                                                    "description", "Limite de resultados"
+                                            )
+                                    ),
+                                    "required", java.util.List.of("comando", "entidade")
+                            )
+                    ),
+                    Map.of(
+                            "name", "listar_demandas",
+                            "description", "Lista as demandas pendentes de configuração",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(),
+                                    "required", java.util.List.of()
+                            )
+                    ),
+                    Map.of(
+                            "name", "resolver_demanda",
+                            "description", "Marca uma demanda como resolvida",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "id", Map.of(
+                                                    "type", "string",
+                                                    "description", "ID da demanda (nome do arquivo)"
+                                            )
+                                    ),
+                                    "required", java.util.List.of("id")
+                            )
+                    ),
+                    Map.of(
+                            "name", "detalhar_demanda",
+                            "description", "Retorna detalhes completos de uma demanda específica",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "id", Map.of(
+                                                    "type", "string",
+                                                    "description", "ID da demanda (nome do arquivo)"
+                                            )
+                                    ),
+                                    "required", java.util.List.of("id")
+                            )
+                    ),
+                    Map.of(
+                            "name", "criar_massa",
+                            "description", "Cria massa de dados no banco a partir de um JSON estruturado com entidades, atributos e relacionamentos",
+                            "inputSchema", Map.of(
+                                    "type", "object",
+                                    "properties", Map.of(
+                                            "entidades", Map.of(
+                                                    "type", "array",
+                                                    "description", "Lista de entidades a serem criadas",
+                                                    "items", Map.of(
+                                                            "type", "object",
+                                                            "properties", Map.of(
+                                                                    "tipo", Map.of("type", "string", "description", "Tipo da entidade (ex: portfolio, acao_estrategica)"),
+                                                                    "dados", Map.of("type", "object", "description", "Atributos da entidade"),
+                                                                    "filhos", Map.of("type", "array", "description", "Entidades filhas (ex: etapas dentro de ação)")
+                                                            )
+                                                    )
+                                            )
+                                    ),
+                                    "required", java.util.List.of("entidades")
+                            )
+                    )
+            );
 
-        var result = Map.of("tools", tools);
-        return successResponse(result, id);
-    }
+            // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
+            var body = Map.of(
+                    "jsonrpc", "2.0",
+                    "result", Map.of("tools", tools),
+                    "id", id
+            );
+            return ServerResponse.ok().body(body);
+        }
 
     private ServerResponse successResponse(Object result, JsonNode id) {
         var body = Map.of(

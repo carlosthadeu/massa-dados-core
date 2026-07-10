@@ -1,0 +1,15 @@
+﻿C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\App.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\lista_arquivos.txt
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\config\CorsConfig.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\config\GlobalExceptionHandler.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\McpCompileService.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\McpDdlToEntityService.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\McpServerConfig.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\McpToolHandler.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\McpUnknownEntityService.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\AttributeInfo.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\DdlRequest.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\DdlResponse.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\MissingColumnInfo.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\UnknownEntityRequest.java
+C:\Desenvolvimento\massa-dados-core\configuracao-ddl-mcp\src\main\java\com\thadeu\massa_dados_core\mcp\dto\UnknownEntityResponse.java

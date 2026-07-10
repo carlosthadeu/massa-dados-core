@@ -2,7 +2,7 @@ package domain.enums.converters;
 
 import java.util.Arrays;
 
-import javax.persistence.AttributeConverter;
+import jakarta.persistence.AttributeConverter;
 
 import domain.enums.SituacaoAcaoEstrategica;
 

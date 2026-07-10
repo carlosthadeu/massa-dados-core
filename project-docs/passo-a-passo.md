@@ -227,6 +227,33 @@ public class GlobalExceptionHandler {
 }
 ```
 
+### Fase 2.9 — Configuração de Logging
+
+**Objetivo:** Ambos os servidores devem gerar arquivos de log com rotação e permitir alteração dinâmica do nível de log via Actuator, facilitando diagnóstico sem reinicialização.
+
+- [x] 2.9.1 Adicionar dependência `spring-boot-starter-actuator` nos `pom.xml` de ambos os servidores
+- [x] 2.9.2 Configurar `application.properties` de ambos os servidores com:
+  - `logging.file.name=logs/<nome-do-servidor>.log`
+  - `logging.file.max-size=10MB`
+  - `logging.file.max-history=7`
+  - `logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n`
+  - `management.endpoints.web.exposure.include=loggers`
+- [x] 2.9.3 Adicionar `logs/` no `.gitignore` para não versionar arquivos de log
+- [x] 2.9.4 Testar geração do arquivo de log em cada servidor
+- [x] 2.9.5 Testar alteração dinâmica de nível de log via Actuator:
+  ```bash
+  curl -X POST http://localhost:<porta>/actuator/loggers/com.thadeu.massa_dados_core.mcp \
+    -H "Content-Type: application/json" \
+    -d '{"configuredLevel": "DEBUG"}'
+  ```
+- [x] 2.9.6 Documentar no README.md:
+  - Localização dos logs
+  - Como acompanhar em tempo real (tail -f)
+  - Como alterar nível de log temporariamente via Actuator
+- [ ] 2.9.7 Implementar logs nas classes existentes, conforme os padrões definidos em `padroes/java/020-log.md`:
+  - [ ] 2.9.7.1 Inserir logs nas classes do servidor configuracao-ddl-mcp
+  - [ ] 2.9.7.2 Inserir logs nas classes do servidor metadados-massa-mcp
+
 ### Fase 3 — Testes
 - [ ] 3.1 Testar com as entidades em C:\Desenvolvimento\massa-dados-core\project-docs\dominio-aplicacao
       3.1.1 Criar um package que seja compartilhado entre os dois servidores mcp

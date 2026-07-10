@@ -160,12 +160,19 @@ public class McpToolHandler {
                 )
         );
 
-        var result = Map.of("tools", tools);
-        return successResponse(result, id);
+                // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
+        var body = Map.of(
+                "jsonrpc", "2.0",
+                "result", Map.of("tools", tools),
+                "id", id
+        );
+        return ServerResponse.ok().body(body);
     }
 
     /**
-     * Cria uma resposta de sucesso JSON-RPC.
+     * Cria uma resposta de sucesso JSON-RPC para chamadas de ferramenta (tools/call).
+     *
+     * <p>O SDK espera {@code result.content[0].text} com o resultado serializado.</p>
      *
      * @param result objeto a ser serializado como resultado
      * @param id     identificador da requisição

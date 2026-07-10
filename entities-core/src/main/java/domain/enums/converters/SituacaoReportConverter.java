@@ -3,7 +3,7 @@ package domain.enums.converters;
 import domain.enums.Situacao;
 import domain.enums.SituacaoReport;
 
-import javax.persistence.AttributeConverter;
+import jakarta.persistence.AttributeConverter;
 
 /**
  * JPA {\@code AttributeConverter} para o enum {@link domain.enums.SituacaoReport}.

@@ -93,10 +93,10 @@ public class McpConsultaService {
                             null
                     );
                 }
-                Expression<?> expressao = montarAgregacao(cb, consulta.agregacao(), atributoAgregacao);
-                query.select((Selection<?>) expressao);
+                var expressao = montarAgregacao(cb, atributoAgregacao, consulta.agregacao());
+                query.select((jakarta.persistence.criteria.Selection) expressao);
             } else {
-                query.select(root);
+                query.select((jakarta.persistence.criteria.Selection) root);
             }
 
             // 5. Aplicar ordenação
@@ -104,9 +104,9 @@ public class McpConsultaService {
                 Path<?> orderPath = getPath(root, consulta.ordenacao().atributo());
                 if (orderPath != null) {
                     if ("desc".equalsIgnoreCase(consulta.ordenacao().direcao())) {
-                        query.orderBy(cb.desc((Expression<?>) orderPath));
+                        query.orderBy(cb.desc(orderPath));
                     } else {
-                        query.orderBy(cb.asc((Expression<?>) orderPath));
+                        query.orderBy(cb.asc(orderPath));
                     }
                 }
             }
@@ -231,13 +231,14 @@ public class McpConsultaService {
         };
     }
 
-    private Expression<?> montarAgregacao(CriteriaBuilder cb, String agregacao, Path<?> path) {
+    @SuppressWarnings("unchecked")
+    private jakarta.persistence.criteria.Selection montarAgregacao(CriteriaBuilder cb, Path path, String agregacao) { 
         return switch (agregacao.toUpperCase()) {
             case "COUNT" -> cb.count(path);
-            case "SUM" -> cb.sum((Path<Number>) path);
-            case "AVG" -> cb.avg((Path<Number>) path);
-            case "MIN" -> cb.min((Path<Comparable>) path);
-            case "MAX" -> cb.max((Path<Comparable>) path);
+            case "SUM" -> cb.sum(path);
+            case "AVG" -> cb.avg(path);
+            case "MIN" -> cb.min(path);
+            case "MAX" -> cb.max(path);
             default -> path;
         };
     }
