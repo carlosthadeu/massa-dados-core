@@ -63,7 +63,7 @@ public class McpToolHandler {
             JsonNode body = objectMapper.readTree(request.servletRequest().getInputStream());
             String method = body.has("method") ? body.get("method").asText() : "";
             JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
-            JsonNode id = body.has("id") ? body.get("id") : objectMapper.nullNode();
+            JsonNode id = body.has("id") ? body.get("id") : null;
 
             log.debug("[handle] Método: {}, id: {}", method, id);
 
@@ -214,14 +214,14 @@ public class McpToolHandler {
      *
      * @param code    código de erro
      * @param message mensagem de erro
-     * @param id      identificador da requisição
+     * @param id      identificador da requisição (pode ser null)
      * @return resposta HTTP 400 com corpo JSON-RPC de erro
      */
     private ServerResponse errorResponse(int code, String message, JsonNode id) {
         var body = new java.util.HashMap<String, Object>();
         body.put("jsonrpc", "2.0");
         body.put("error", Map.of("code", code, "message", message));
-        body.put("id", id);
+        body.put("id", id); // id pode ser null, HashMap aceita null
         return ServerResponse.status(400).body(body);
     }
 
