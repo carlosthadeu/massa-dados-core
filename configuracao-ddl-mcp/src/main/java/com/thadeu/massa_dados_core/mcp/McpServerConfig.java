@@ -56,7 +56,11 @@ public class McpServerConfig {
     public ResponseEntity<Map<String, Object>> handleMcp(HttpServletRequest request) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
         try {
-            JsonNode body = objectMapper.readTree(request.getInputStream());
+            // Ler o corpo da requisição como string para log
+            String bodyString = new String(request.getInputStream().readAllBytes());
+            log.debug("[handleMcp] Corpo recebido: {}", bodyString);
+
+            JsonNode body = objectMapper.readTree(bodyString);
             String method = body.has("method") ? body.get("method").asText() : "";
             JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
             JsonNode id = body.has("id") ? body.get("id") : null;
