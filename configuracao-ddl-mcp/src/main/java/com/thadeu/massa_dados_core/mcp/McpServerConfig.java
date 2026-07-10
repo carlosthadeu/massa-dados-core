@@ -2,6 +2,7 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -29,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 8.0
+ * @version 9.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -64,13 +65,21 @@ public class McpServerConfig {
      * <p>O Spring gerencia corretamente a resposta assíncrona, liberando a thread
      * do container enquanto mantém a conexão aberta.</p>
      *
+     * @param response objeto HttpServletResponse para configurar headers manualmente
      * @return {@link SseEmitter} configurado para o protocolo MCP
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter connect() {
+    public SseEmitter connect(HttpServletResponse response) {
         String sessionId = UUID.randomUUID().toString();
         // Timeout longo (30 minutos) para evitar que o Spring feche a conexão prematuramente
         SseEmitter emitter = new SseEmitter(1_800_000L);
+
+        // Configura headers SSE manualmente antes de retornar o emitter
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        response.setHeader("X-Accel-Buffering", "no");
 
         activeEmitters.put(sessionId, emitter);
         log.info("[connect] Nova sessão SSE registrada: {}", sessionId);
@@ -98,7 +107,7 @@ public class McpServerConfig {
                 return;
             }
             try {
-                // Comentário SSE vazio como keep-alive
+                // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
                 em.send(SseEmitter.event().comment("keep-alive"));
             } catch (IOException e) {
                 log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
