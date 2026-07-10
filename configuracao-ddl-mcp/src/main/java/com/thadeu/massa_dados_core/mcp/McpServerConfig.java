@@ -2,6 +2,7 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -67,7 +68,14 @@ public class McpServerConfig {
      * @return {@link SseEmitter} configurado para o protocolo MCP
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter connect() {
+    public SseEmitter connect(HttpServletResponse response) {
+        // Configura headers SSE manualmente antes de retornar o SseEmitter
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        response.setHeader("X-Accel-Buffering", "no");
+
         String sessionId = UUID.randomUUID().toString();
         // Timeout longo (30 minutos) para evitar que o Spring feche a conexão prematuramente
         SseEmitter emitter = new SseEmitter(1_800_000L);
@@ -79,10 +87,11 @@ public class McpServerConfig {
         String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
         // Envia o handshake inicial (evento "endpoint") usando o SseEmitter
+        // Garantindo o formato exato que o cliente EventFlux espera: "event: endpoint\ndata: <url>\n\n"
         try {
             emitter.send(SseEmitter.event()
                     .name("endpoint")
-                    .data(messageEndpointUrl));
+                    .data(" " + messageEndpointUrl));  // espaço antes da URL para garantir formato correto
             log.info("[connect] Handshake inicial 'endpoint' enviado com sucesso para sessão {}", sessionId);
         } catch (IOException e) {
             log.error("[connect] Erro ao enviar handshake para sessão {}", sessionId, e);
