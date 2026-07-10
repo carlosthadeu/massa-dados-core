@@ -108,6 +108,18 @@ public class McpServerConfig {
     }
 
     /**
+     * Endpoint GET alternativo para clientes que não suportam SSE.
+     * Retorna a lista de ferramentas disponíveis (compatibilidade).
+     *
+     * @return resposta HTTP com lista de ferramentas no formato JSON-RPC
+     */
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> handleMcpGet() {
+        log.info("[handleMcpGet] Requisição GET recebida em /mcp - retornando lista de ferramentas");
+        return handler.handleToolsList(null);
+    }
+
+    /**
      * Endpoint POST para receber mensagens JSON-RPC de uma sessão SSE específica.
      *
      * @param sessionId identificador da sessão SSE

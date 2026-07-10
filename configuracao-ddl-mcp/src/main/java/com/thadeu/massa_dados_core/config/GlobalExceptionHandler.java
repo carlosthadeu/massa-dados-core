@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -88,6 +89,22 @@ public class GlobalExceptionHandler {
         body.put("error", Map.of("code", -32700, "message", "Parse error: " + ex.getMessage()));
         body.put("id", null);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /**
+     * Trata exceções de Content-Type não aceitável (Accept header inválido).
+     *
+     * @param ex exceção capturada
+     * @return resposta HTTP 406 com formato JSON-RPC de erro
+     */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<Map<String, Object>> handleMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+        log.warn("[handleMediaTypeNotAcceptable] Accept header não suportado: {}", ex.getMessage());
+        Map<String, Object> body = new HashMap<>();
+        body.put("jsonrpc", "2.0");
+        body.put("error", Map.of("code", -32602, "message", "Not acceptable: " + ex.getMessage()));
+        body.put("id", null);
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(body);
     }
 
     /**
