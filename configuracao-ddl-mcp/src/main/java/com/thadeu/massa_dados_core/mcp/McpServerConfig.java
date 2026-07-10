@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +27,7 @@ import java.util.Map;
  * @version 1.0
  */
 @RestController
+@RequestMapping("/mcp")
 public class McpServerConfig {
 
     private static final Logger log = LoggerFactory.getLogger(McpServerConfig.class);
@@ -50,7 +52,7 @@ public class McpServerConfig {
      * @param request requisição HTTP
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
-    @PostMapping("/mcp")
+    @PostMapping
     public ResponseEntity<Map<String, Object>> handleMcp(HttpServletRequest request) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
         try {
@@ -80,7 +82,7 @@ public class McpServerConfig {
      *
      * @return resposta HTTP com lista de ferramentas no formato JSON-RPC
      */
-    @GetMapping("/mcp")
+    @GetMapping
     public ResponseEntity<Map<String, Object>> handleMcpGet() {
         log.info("[handleMcpGet] Requisição GET recebida em /mcp - retornando lista de ferramentas");
         return handler.handleToolsList(null);
