@@ -7,10 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 
 /**
@@ -49,17 +49,15 @@ public class McpServerConfig {
     /**
      * Endpoint MCP que recebe requisições JSON-RPC via POST.
      *
-     * @param request requisição HTTP
+     * @param bodyString corpo da requisição como string JSON
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handleMcp(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody String bodyString) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
-        try {
-            // Ler o corpo da requisição como string para log
-            String bodyString = new String(request.getInputStream().readAllBytes());
-            log.debug("[handleMcp] Corpo recebido: {}", bodyString);
+        log.debug("[handleMcp] Corpo recebido: {}", bodyString);
 
+        try {
             JsonNode body = objectMapper.readTree(bodyString);
             String method = body.has("method") ? body.get("method").asText() : "";
             JsonNode params = body.has("params") ? body.get("params") : objectMapper.nullNode();
