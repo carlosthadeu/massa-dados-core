@@ -2,6 +2,7 @@ package com.thadeu.massa_dados_core.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -13,12 +14,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Configuração do endpoint MCP para o servidor configuracao-ddl-mcp.
@@ -31,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 3.0
+ * @version 4.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -43,9 +48,14 @@ public class McpServerConfig {
     private final ObjectMapper objectMapper;
 
     /**
-     * Mapa de emissores SSE, um por sessão (identificado pelo sessionId).
+     * Mapa de saídas SSE, um por sessão (identificado pelo sessionId).
      */
-    private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, OutputStream> sseOutputs = new ConcurrentHashMap<>();
+
+    /**
+     * Executor para manter a conexão SSE aberta.
+     */
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     /**
      * Construtor com injeção de dependências.
@@ -64,50 +74,51 @@ public class McpServerConfig {
      * <p>O primeiro evento enviado contém a URL para onde o cliente deve
      * enviar os POSTs subsequentes (endpoint de mensagens).</p>
      *
-     * @return emissor SSE
+     * @param response resposta HTTP para escrever o stream SSE
+     * @return StreamingResponseBody para manter a conexão aberta
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter connect() {
+    public StreamingResponseBody connect(HttpServletResponse response) {
         log.info("[connect] Nova conexão SSE estabelecida");
 
-        // Timeout de 30 minutos para evitar desconexões prematuras
-        SseEmitter emitter = new SseEmitter(1800000L);
+        response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        response.setHeader("X-Accel-Buffering", "no");
+
         String sessionId = UUID.randomUUID().toString();
 
-        emitters.put(sessionId, emitter);
+        return outputStream -> {
+            sseOutputs.put(sessionId, outputStream);
 
-        emitter.onCompletion(() -> {
-            log.info("[connect] Conexão SSE concluída para sessão {}", sessionId);
-            emitters.remove(sessionId);
-        });
-        emitter.onTimeout(() -> {
-            log.warn("[connect] Conexão SSE expirou para sessão {}", sessionId);
-            emitters.remove(sessionId);
-        });
-        emitter.onError(ex -> {
-            log.error("[connect] Erro na conexão SSE para sessão {}", sessionId, ex);
-            emitters.remove(sessionId);
-        });
+            try {
+                // Envia o handshake inicial imediatamente para o ChatMCP registrar o endpoint
+                String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
+                String endpointEvent = "event: endpoint\ndata: " + messageEndpointUrl + "\n\n";
+                outputStream.write(endpointEvent.getBytes(StandardCharsets.UTF_8));
+                outputStream.flush();
+                log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
 
-        // Envia o handshake inicial imediatamente para o ChatMCP registrar o endpoint
-        try {
-            // O evento DEVE se chamar "endpoint" e o dado deve ser a URL para POST
-            String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
-
-            // Envia manualmente no formato SSE esperado pelo cliente Dart
-            // O formato correto é:
-            // event: endpoint
-            // data: http://localhost:8081/mcp?sessionId=xxx
-            // 
-            emitter.send("event: endpoint\ndata: " + messageEndpointUrl + "\n\n");
-
-            log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
-        } catch (IOException e) {
-            log.error("[connect] Erro ao enviar evento 'endpoint' para sessão {}", sessionId, e);
-            emitter.completeWithError(e);
-        }
-
-        return emitter;
+                // Mantém a conexão aberta enviando keep-alive a cada 30 segundos
+                while (true) {
+                    try {
+                        Thread.sleep(30000);
+                        String keepAlive = ": keepalive\n\n";
+                        outputStream.write(keepAlive.getBytes(StandardCharsets.UTF_8));
+                        outputStream.flush();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                log.warn("[connect] Conexão SSE interrompida para sessão {}: {}", sessionId, e.getMessage());
+            } finally {
+                sseOutputs.remove(sessionId);
+                log.info("[connect] Conexão SSE encerrada para sessão {}", sessionId);
+            }
+        };
     }
 
     /**
@@ -127,8 +138,8 @@ public class McpServerConfig {
 
         log.info("[handlePost] Mensagem recebida para sessão {}", sessionId);
 
-        SseEmitter emitter = emitters.get(sessionId);
-        if (emitter == null) {
+        OutputStream outputStream = sseOutputs.get(sessionId);
+        if (outputStream == null) {
             log.warn("[handlePost] Sessão não encontrada: {}", sessionId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
@@ -158,8 +169,11 @@ public class McpServerConfig {
             // Enviar resposta via SSE no evento "message"
             if (response.getBody() != null) {
                 String responseJson = objectMapper.writeValueAsString(response.getBody());
-                // Envia manualmente no formato SSE esperado pelo cliente Dart
-                emitter.send("event: message\ndata: " + responseJson + "\n\n");
+                String messageEvent = "event: message\ndata: " + responseJson + "\n\n";
+                synchronized (outputStream) {
+                    outputStream.write(messageEvent.getBytes(StandardCharsets.UTF_8));
+                    outputStream.flush();
+                }
                 log.debug("[handlePost] Resposta enviada via SSE para sessão {}", sessionId);
             }
 
@@ -170,7 +184,11 @@ public class McpServerConfig {
                 Map<String, Object> errorBody = handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null).getBody();
                 if (errorBody != null) {
                     String errorJson = objectMapper.writeValueAsString(errorBody);
-                    emitter.send("event: message\ndata: " + errorJson + "\n\n");
+                    String errorEvent = "event: message\ndata: " + errorJson + "\n\n";
+                    synchronized (outputStream) {
+                        outputStream.write(errorEvent.getBytes(StandardCharsets.UTF_8));
+                        outputStream.flush();
+                    }
                 }
             } catch (IOException ex) {
                 log.error("[handlePost] Erro ao enviar resposta de erro via SSE", ex);
