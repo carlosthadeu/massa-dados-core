@@ -1,6 +1,5 @@
 package com.thadeu.massa_dados_core.mcp;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thadeu.massa_dados_core.mcp.dto.DdlRequest;
 import com.thadeu.massa_dados_core.mcp.dto.DdlResponse;
@@ -8,27 +7,23 @@ import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityRequest;
 import com.thadeu.massa_dados_core.mcp.dto.UnknownEntityResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbacks;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.function.Function;
 
 /**
- * Manipulador de requisições MCP para o servidor configuracao-ddl-mcp.
+ * Configuração das ferramentas MCP usando o Spring AI MCP Server.
  *
- * <p>Responsabilidades:
- * <ul>
- *   <li>Receber requisições JSON-RPC no endpoint /mcp</li>
- *   <li>Rotear para as ferramentas disponíveis (ddl_to_entity, identify_unknown_entities)</li>
- *   <li>Retornar respostas padronizadas JSON-RPC</li>
- * </ul>
+ * <p>Registra as ferramentas {@code ddl_to_entity} e {@code identify_unknown_entities}
+ * como {@link ToolCallback} para que o Spring AI exponha automaticamente via MCP.</p>
  *
  * @author Thadeu Garrido
- * @version 1.0
+ * @version 2.0
  */
-@Component
+@Configuration
 public class McpToolHandler {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolHandler.class);
@@ -53,160 +48,49 @@ public class McpToolHandler {
     }
 
     /**
-     * Roteia uma chamada de ferramenta para o manipulador adequado.
+     * Registra a ferramenta ddl_to_entity.
      *
-     * @param params parâmetros da chamada
-     * @param id     identificador da requisição JSON-RPC
-     * @return resposta da ferramenta
+     * @return ToolCallback para a ferramenta ddl_to_entity
      */
-    public ResponseEntity<Map<String, Object>> handleToolCall(JsonNode params, JsonNode id) {
-        String toolName = params.has("name") ? params.get("name").asText() : "";
-        JsonNode arguments = params.has("arguments") ? params.get("arguments") : objectMapper.nullNode();
-
-        log.info("[handleToolCall] Ferramenta solicitada: {}", toolName);
-
-        return switch (toolName) {
-            case "ddl_to_entity" -> handleDdlToEntity(arguments, id);
-            case "identify_unknown_entities" -> handleIdentifyUnknownEntities(arguments, id);
-            default -> {
-                log.warn("[handleToolCall] Ferramenta desconhecida: {}", toolName);
-                yield errorResponse(-32602, "Unknown tool: " + toolName, id);
-            }
-        };
+    @Bean
+    public ToolCallback ddlToEntityTool() {
+        log.info("[ddlToEntityTool] Registrando ferramenta ddl_to_entity");
+        return ToolCallbacks.from("ddl_to_entity",
+                "Converte um script DDL em uma classe Entity JPA e salva no projeto do Servidor 2",
+                (Function<DdlRequest, DdlResponse>) request -> {
+                    log.info("[ddlToEntityTool] Processando DDL");
+                    try {
+                        DdlResponse response = ddlToEntityService.processDdl(request);
+                        log.info("[ddlToEntityTool] Entity gerada: {}", response.entityClassName());
+                        return response;
+                    } catch (Exception e) {
+                        log.error("[ddlToEntityTool] Erro ao processar DDL", e);
+                        throw new RuntimeException("Error processing DDL: " + e.getMessage(), e);
+                    }
+                });
     }
 
     /**
-     * Manipula a ferramenta ddl_to_entity.
+     * Registra a ferramenta identify_unknown_entities.
      *
-     * @param arguments argumentos da ferramenta
-     * @param id        identificador da requisição
-     * @return resposta com a Entity gerada
+     * @return ToolCallback para a ferramenta identify_unknown_entities
      */
-    private ResponseEntity<Map<String, Object>> handleDdlToEntity(JsonNode arguments, JsonNode id) {
-        log.info("[handleDdlToEntity] Processando DDL");
-        try {
-            DdlRequest ddlRequest = objectMapper.treeToValue(arguments, DdlRequest.class);
-            DdlResponse response = ddlToEntityService.processDdl(ddlRequest);
-            log.info("[handleDdlToEntity] Entity gerada: {}", response.entityClassName());
-            return successResponse(response, id);
-        } catch (Exception e) {
-            log.error("[handleDdlToEntity] Erro ao processar DDL", e);
-            return errorResponse(-32603, "Error processing DDL: " + e.getMessage(), id);
-        }
-    }
-
-    /**
-     * Manipula a ferramenta identify_unknown_entities.
-     *
-     * @param arguments argumentos da ferramenta
-     * @param id        identificador da requisição
-     * @return resposta com tabelas/colunas não reconhecidas
-     */
-    private ResponseEntity<Map<String, Object>> handleIdentifyUnknownEntities(JsonNode arguments, JsonNode id) {
-        log.info("[handleIdentifyUnknownEntities] Identificando entidades desconhecidas");
-        try {
-            UnknownEntityRequest request = objectMapper.treeToValue(arguments, UnknownEntityRequest.class);
-            UnknownEntityResponse response = unknownEntityService.identify(request);
-            log.info("[handleIdentifyUnknownEntities] Tabelas faltantes: {}, Colunas faltantes: {}",
-                    response.missingTables().size(), response.missingColumns().size());
-            return successResponse(response, id);
-        } catch (Exception e) {
-            log.error("[handleIdentifyUnknownEntities] Erro ao identificar entidades", e);
-            return errorResponse(-32603, "Error identifying unknown entities: " + e.getMessage(), id);
-        }
-    }
-
-    /**
-     * Retorna a lista de ferramentas disponíveis.
-     *
-     * @param id identificador da requisição
-     * @return lista de ferramentas no formato JSON-RPC
-     */
-    public ResponseEntity<Map<String, Object>> handleToolsList(JsonNode id) {
-        log.info("[handleToolsList] Listando ferramentas disponíveis");
-        var tools = java.util.List.of(
-                Map.of(
-                        "name", "ddl_to_entity",
-                        "description", "Converte um script DDL em uma classe Entity JPA e salva no projeto do Servidor 2",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "ddlScript", Map.of(
-                                                "type", "string",
-                                                "description", "Script DDL (CREATE TABLE, ALTER TABLE, etc.)"
-                                        )
-                                ),
-                                "required", java.util.List.of("ddlScript")
-                        )
-                ),
-                Map.of(
-                        "name", "identify_unknown_entities",
-                        "description", "Compara tabelas/colunas do DDL com as classes Entity existentes e identifica itens não reconhecidos",
-                        "inputSchema", Map.of(
-                                "type", "object",
-                                "properties", Map.of(
-                                        "ddlScript", Map.of(
-                                                "type", "string",
-                                                "description", "Script DDL para análise"
-                                        )
-                                ),
-                                "required", java.util.List.of("ddlScript")
-                        )
-                )
-        );
-
-        // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
-        var body = new HashMap<String, Object>();
-        body.put("jsonrpc", "2.0");
-        body.put("result", Map.of("tools", tools));
-        body.put("id", id);
-        return ResponseEntity.ok(body);
-    }
-
-    /**
-     * Cria uma resposta de sucesso JSON-RPC para chamadas de ferramenta (tools/call).
-     *
-     * <p>O SDK espera {@code result.content[0].text} com o resultado serializado.</p>
-     *
-     * @param result objeto a ser serializado como resultado
-     * @param id     identificador da requisição
-     * @return resposta HTTP 200 com corpo JSON-RPC
-     */
-    private ResponseEntity<Map<String, Object>> successResponse(Object result, JsonNode id) {
-        var body = new HashMap<String, Object>();
-        body.put("jsonrpc", "2.0");
-        body.put("result", Map.of("content", java.util.List.of(Map.of("type", "text", "text", toJsonString(result)))));
-        body.put("id", id);
-        return ResponseEntity.ok(body);
-    }
-
-    /**
-     * Cria uma resposta de erro JSON-RPC.
-     *
-     * @param code    código de erro
-     * @param message mensagem de erro
-     * @param id      identificador da requisição (pode ser null)
-     * @return resposta HTTP 400 com corpo JSON-RPC de erro
-     */
-    public ResponseEntity<Map<String, Object>> errorResponse(int code, String message, JsonNode id) {
-        var body = new HashMap<String, Object>();
-        body.put("jsonrpc", "2.0");
-        body.put("error", Map.of("code", code, "message", message));
-        body.put("id", id); // id pode ser null, HashMap aceita null
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
-    }
-
-    /**
-     * Serializa um objeto para JSON string.
-     *
-     * @param obj objeto a ser serializado
-     * @return string JSON
-     */
-    private String toJsonString(Object obj) {
-        try {
-            return objectMapper.writeValueAsString(obj);
-        } catch (Exception e) {
-            return "{\"error\":\"serialization failed\"}";
-        }
+    @Bean
+    public ToolCallback identifyUnknownEntitiesTool() {
+        log.info("[identifyUnknownEntitiesTool] Registrando ferramenta identify_unknown_entities");
+        return ToolCallbacks.from("identify_unknown_entities",
+                "Compara tabelas/colunas do DDL com as classes Entity existentes e identifica itens não reconhecidos",
+                (Function<UnknownEntityRequest, UnknownEntityResponse>) request -> {
+                    log.info("[identifyUnknownEntitiesTool] Identificando entidades desconhecidas");
+                    try {
+                        UnknownEntityResponse response = unknownEntityService.identify(request);
+                        log.info("[identifyUnknownEntitiesTool] Tabelas faltantes: {}, Colunas faltantes: {}",
+                                response.missingTables().size(), response.missingColumns().size());
+                        return response;
+                    } catch (Exception e) {
+                        log.error("[identifyUnknownEntitiesTool] Erro ao identificar entidades", e);
+                        throw new RuntimeException("Error identifying unknown entities: " + e.getMessage(), e);
+                    }
+                });
     }
 }
