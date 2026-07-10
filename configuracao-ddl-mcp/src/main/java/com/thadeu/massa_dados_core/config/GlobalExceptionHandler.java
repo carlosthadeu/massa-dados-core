@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -55,6 +56,22 @@ public class GlobalExceptionHandler {
         body.put("error", Map.of("code", -32601, "message", "Method not found: " + ex.getMethod()));
         body.put("id", null);
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    /**
+     * Trata exceções de Content-Type não suportado.
+     *
+     * @param ex exceção capturada
+     * @return resposta HTTP 415 com formato JSON-RPC de erro
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        log.warn("[handleMediaTypeNotSupported] Content-Type não suportado: {}", ex.getContentType());
+        Map<String, Object> body = new HashMap<>();
+        body.put("jsonrpc", "2.0");
+        body.put("error", Map.of("code", -32602, "message", "Content-Type not supported: " + ex.getContentType()));
+        body.put("id", null);
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(body);
     }
 
     /**
