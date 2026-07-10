@@ -4,19 +4,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Sinks;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.time.Duration;
+import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -30,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 2.0
+ * @version 3.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -42,9 +43,9 @@ public class McpServerConfig {
     private final ObjectMapper objectMapper;
 
     /**
-     * Mapa de sinks SSE, um por sessão (identificado pelo sessionId).
+     * Mapa de emissores SSE, um por sessão (identificado pelo sessionId).
      */
-    private final ConcurrentHashMap<String, Sinks.Many<String>> sseSinks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
     /**
      * Construtor com injeção de dependências.
@@ -63,78 +64,75 @@ public class McpServerConfig {
      * <p>O primeiro evento enviado contém a URL para onde o cliente deve
      * enviar os POSTs subsequentes (endpoint de mensagens).</p>
      *
-     * @return fluxo de eventos SSE
+     * @return emissor SSE
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<org.springframework.http.codec.ServerSentEvent<String>> handleSse() {
-        log.info("[handleSse] Nova conexão SSE estabelecida");
+    public SseEmitter connect() {
+        log.info("[connect] Nova conexão SSE estabelecida");
 
-        // Gerar um identificador único para esta sessão
-        String sessionId = java.util.UUID.randomUUID().toString();
+        // Timeout de 30 minutos para evitar desconexões prematuras
+        SseEmitter emitter = new SseEmitter(1800000L);
+        String sessionId = UUID.randomUUID().toString();
 
-        // Criar um sink para esta sessão
-        Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
-        sseSinks.put(sessionId, sink);
+        emitters.put(sessionId, emitter);
 
-        // URL para onde o cliente deve enviar os POSTs
-        String messageUrl = "/mcp/message/" + sessionId;
+        emitter.onCompletion(() -> {
+            log.info("[connect] Conexão SSE concluída para sessão {}", sessionId);
+            emitters.remove(sessionId);
+        });
+        emitter.onTimeout(() -> {
+            log.warn("[connect] Conexão SSE expirou para sessão {}", sessionId);
+            emitters.remove(sessionId);
+        });
+        emitter.onError(ex -> {
+            log.error("[connect] Erro na conexão SSE para sessão {}", sessionId, ex);
+            emitters.remove(sessionId);
+        });
 
-        // Primeiro evento: endpoint de mensagens
-        sink.tryEmitNext("event: endpoint\ndata: " + messageUrl + "\n\n");
+        // Envia o handshake inicial imediatamente para o ChatMCP registrar o endpoint
+        try {
+            // O evento DEVE se chamar "endpoint" e o dado deve ser a URL para POST
+            String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
-        // Evento de keep-alive a cada 30 segundos
-        Flux<Long> keepAlive = Flux.interval(Duration.ofSeconds(30))
-                .map(tick -> {
-                    sink.tryEmitNext(": keepalive\n\n");
-                    return tick;
-                });
+            emitter.send(SseEmitter.event()
+                    .name("endpoint") // IMPORTANTE: O Dart procura exatamente por esse nome
+                    .data(messageEndpointUrl));
 
-        // Fluxo principal: eventos do sink
-        Flux<org.springframework.http.codec.ServerSentEvent<String>> eventFlux = sink.asFlux()
-                .map(data -> org.springframework.http.codec.ServerSentEvent.<String>builder()
-                        .data(data)
-                        .build())
-                .doOnCancel(() -> {
-                    log.info("[handleSse] Conexão SSE cancelada para sessão {}", sessionId);
-                    sseSinks.remove(sessionId);
-                })
-                .doOnTerminate(() -> {
-                    log.info("[handleSse] Conexão SSE encerrada para sessão {}", sessionId);
-                    sseSinks.remove(sessionId);
-                });
+            log.info("[connect] Evento 'endpoint' enviado para sessão {}: {}", sessionId, messageEndpointUrl);
+        } catch (IOException e) {
+            log.error("[connect] Erro ao enviar evento 'endpoint' para sessão {}", sessionId, e);
+            emitter.completeWithError(e);
+        }
 
-        // Combinar keep-alive com eventos
-        return Flux.merge(eventFlux, keepAlive.flatMap(tick -> Flux.empty()));
+        return emitter;
     }
 
     /**
-     * Endpoint GET alternativo para clientes que não suportam SSE.
-     * Retorna a lista de ferramentas disponíveis (compatibilidade).
+     * Endpoint POST que recebe comandos JSON-RPC do ChatMCP.
      *
-     * @return resposta HTTP com lista de ferramentas no formato JSON-RPC
-     */
-    @GetMapping
-    public ResponseEntity<Map<String, Object>> handleMcpGet() {
-        log.info("[handleMcpGet] Requisição GET recebida em /mcp - retornando lista de ferramentas");
-        return handler.handleToolsList(null);
-    }
-
-    /**
-     * Endpoint POST para receber mensagens JSON-RPC de uma sessão SSE específica.
+     * <p>O ChatMCP envia os comandos via POST com o parâmetro {@code sessionId}
+     * na query string. A resposta é enviada de volta pelo canal SSE.</p>
      *
      * @param sessionId identificador da sessão SSE
      * @param body      corpo da requisição JSON-RPC
-     * @return resposta HTTP com resultado ou erro JSON-RPC
+     * @return resposta HTTP 202 Accepted
      */
-    @PostMapping("/message/{sessionId}")
-    public ResponseEntity<Map<String, Object>> handleMessage(
-            @PathVariable String sessionId,
+    @PostMapping
+    public ResponseEntity<Void> handlePost(
+            @RequestParam("sessionId") String sessionId,
             @RequestBody String body) {
-        log.info("[handleMessage] Mensagem recebida para sessão {}", sessionId);
+
+        log.info("[handlePost] Mensagem recebida para sessão {}", sessionId);
+
+        SseEmitter emitter = emitters.get(sessionId);
+        if (emitter == null) {
+            log.warn("[handlePost] Sessão não encontrada: {}", sessionId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
 
         if (body == null || body.trim().isEmpty()) {
-            log.warn("[handleMessage] Corpo da requisição vazio");
-            return handler.errorResponse(-32602, "Corpo da requisição não pode ser vazio", null);
+            log.warn("[handlePost] Corpo da requisição vazio");
+            return ResponseEntity.badRequest().build();
         }
 
         try {
@@ -143,65 +141,41 @@ public class McpServerConfig {
             JsonNode params = jsonBody.has("params") ? jsonBody.get("params") : objectMapper.nullNode();
             JsonNode id = jsonBody.has("id") ? jsonBody.get("id") : null;
 
-            log.debug("[handleMessage] Método: {}, id: {}", method, id);
+            log.debug("[handlePost] Método: {}, id: {}", method, id);
 
             ResponseEntity<Map<String, Object>> response = switch (method) {
                 case "tools/call" -> handler.handleToolCall(params, id);
                 case "tools/list" -> handler.handleToolsList(id);
                 default -> {
-                    log.warn("[handleMessage] Método não encontrado: {}", method);
+                    log.warn("[handlePost] Método não encontrado: {}", method);
                     yield handler.errorResponse(-32601, "Method not found: " + method, id);
                 }
             };
 
-            // Enviar resposta via SSE se houver sink para esta sessão
-            Sinks.Many<String> sink = sseSinks.get(sessionId);
-            if (sink != null && response.getBody() != null) {
+            // Enviar resposta via SSE no evento "message"
+            if (response.getBody() != null) {
                 String responseJson = objectMapper.writeValueAsString(response.getBody());
-                sink.tryEmitNext("event: message\ndata: " + responseJson + "\n\n");
+                emitter.send(SseEmitter.event()
+                        .name("message")
+                        .data(responseJson));
+                log.debug("[handlePost] Resposta enviada via SSE para sessão {}", sessionId);
             }
 
-            return response;
+            return ResponseEntity.accepted().build();
         } catch (Exception e) {
-            log.error("[handleMessage] Erro interno ao processar requisição", e);
-            return handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null);
-        }
-    }
-
-    /**
-     * Endpoint POST legado para compatibilidade com clientes que não usam SSE.
-     *
-     * @param body corpo da requisição JSON-RPC
-     * @return resposta HTTP com resultado ou erro JSON-RPC
-     */
-    @PostMapping
-    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody String body) {
-        log.info("[handleMcp] Requisição MCP recebida em /mcp (legado)");
-
-        if (body == null || body.trim().isEmpty()) {
-            log.warn("[handleMcp] Corpo da requisição vazio");
-            return handler.errorResponse(-32602, "Corpo da requisição não pode ser vazio", null);
-        }
-
-        try {
-            JsonNode jsonBody = objectMapper.readTree(body);
-            String method = jsonBody.has("method") ? jsonBody.get("method").asText() : "";
-            JsonNode params = jsonBody.has("params") ? jsonBody.get("params") : objectMapper.nullNode();
-            JsonNode id = jsonBody.has("id") ? jsonBody.get("id") : null;
-
-            log.debug("[handleMcp] Método: {}, id: {}", method, id);
-
-            return switch (method) {
-                case "tools/call" -> handler.handleToolCall(params, id);
-                case "tools/list" -> handler.handleToolsList(id);
-                default -> {
-                    log.warn("[handleMcp] Método não encontrado: {}", method);
-                    yield handler.errorResponse(-32601, "Method not found: " + method, id);
+            log.error("[handlePost] Erro interno ao processar requisição", e);
+            try {
+                Map<String, Object> errorBody = handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null).getBody();
+                if (errorBody != null) {
+                    String errorJson = objectMapper.writeValueAsString(errorBody);
+                    emitter.send(SseEmitter.event()
+                            .name("message")
+                            .data(errorJson));
                 }
-            };
-        } catch (Exception e) {
-            log.error("[handleMcp] Erro interno ao processar requisição", e);
-            return handler.errorResponse(-32603, "Internal error: " + e.getMessage(), null);
+            } catch (IOException ex) {
+                log.error("[handlePost] Erro ao enviar resposta de erro via SSE", ex);
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

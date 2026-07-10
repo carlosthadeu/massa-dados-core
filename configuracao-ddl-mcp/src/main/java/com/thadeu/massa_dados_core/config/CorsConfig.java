@@ -30,7 +30,7 @@ public class CorsConfig implements WebMvcConfigurer {
         log.info("[addCorsMappings] Configurando CORS para permitir todas as origens");
         registry.addMapping("/**")
                 .allowedOrigins("*")
-                .allowedMethods("POST", "OPTIONS")
+                .allowedMethods("GET", "POST", "OPTIONS")
                 .allowedHeaders("*");
     }
 }
