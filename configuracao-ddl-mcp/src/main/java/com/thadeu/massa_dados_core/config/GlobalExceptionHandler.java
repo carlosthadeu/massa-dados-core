@@ -140,7 +140,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
-        log.error("[handleGeneral] Erro não tratado", ex);
+        log.error("[handleGeneral] Erro não tratado. Tipo: {}, Mensagem: {}", ex.getClass().getName(), ex.getMessage(), ex);
         return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, -32603,
                 ex.getMessage() != null ? ex.getMessage() : "Internal server error");
     }

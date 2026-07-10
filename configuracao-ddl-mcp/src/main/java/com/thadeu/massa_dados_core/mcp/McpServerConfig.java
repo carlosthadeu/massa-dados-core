@@ -69,6 +69,8 @@ public class McpServerConfig {
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter connect(HttpServletResponse response) {
+        log.info("[connect] Cliente está tentando se conectar ao endpoint SSE");
+
         // Configura headers SSE manualmente antes de retornar o SseEmitter
         response.setContentType("text/event-stream");
         response.setCharacterEncoding("UTF-8");
@@ -76,27 +78,35 @@ public class McpServerConfig {
         response.setHeader("Connection", "keep-alive");
         response.setHeader("X-Accel-Buffering", "no");
 
+        log.info("[connect] Headers SSE configurados: Content-Type=text/event-stream, Cache-Control=no-cache, Connection=keep-alive");
+
         String sessionId = UUID.randomUUID().toString();
+        log.info("[connect] SessionId gerado: {}", sessionId);
+
         // Timeout longo (30 minutos) para evitar que o Spring feche a conexão prematuramente
         SseEmitter emitter = new SseEmitter(1_800_000L);
+        log.info("[connect] SseEmitter criado com timeout de 30 minutos");
 
         activeEmitters.put(sessionId, emitter);
-        log.info("[connect] Nova sessão SSE registrada: {}", sessionId);
+        log.info("[connect] Nova sessão SSE registrada: {}. Total de sessões ativas: {}", sessionId, activeEmitters.size());
 
         // Monta o endpoint que o ChatMCP usará para enviar os comandos POST
         String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
+        log.info("[connect] URL do endpoint POST: {}", messageEndpointUrl);
 
         // Envia o handshake inicial (evento "endpoint") usando o SseEmitter
         // Garantindo o formato exato que o cliente EventFlux espera: "event: endpoint\ndata: <url>\n\n"
         try {
+            log.info("[connect] Tentando enviar handshake 'endpoint' para sessão {}", sessionId);
             emitter.send(SseEmitter.event()
                     .name("endpoint")
                     .data(" " + messageEndpointUrl));  // espaço antes da URL para garantir formato correto
             log.info("[connect] Handshake inicial 'endpoint' enviado com sucesso para sessão {}", sessionId);
         } catch (IOException e) {
-            log.error("[connect] Erro ao enviar handshake para sessão {}", sessionId, e);
+            log.error("[connect] Erro ao enviar handshake para sessão {}. Detalhes: {}", sessionId, e.getMessage(), e);
             activeEmitters.remove(sessionId);
             emitter.completeWithError(e);
+            log.warn("[connect] Sessão {} removida após erro no handshake. Total de sessões ativas: {}", sessionId, activeEmitters.size());
             return emitter;
         }
 
@@ -104,14 +114,18 @@ public class McpServerConfig {
         heartbeatExecutor.scheduleAtFixedRate(() -> {
             SseEmitter em = activeEmitters.get(sessionId);
             if (em == null) {
+                log.debug("[connect] Heartbeat ignorado para sessão {} (já removida)", sessionId);
                 return;
             }
             try {
+                log.debug("[connect] Enviando heartbeat para sessão {}", sessionId);
                 // Comentário SSE vazio como keep-alive
                 em.send(SseEmitter.event().comment("keep-alive"));
+                log.debug("[connect] Heartbeat enviado com sucesso para sessão {}", sessionId);
             } catch (IOException e) {
-                log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
+                log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}. Detalhes: {}", sessionId, e.getMessage());
                 activeEmitters.remove(sessionId);
+                log.warn("[connect] Sessão {} removida após falha no heartbeat. Total de sessões ativas: {}", sessionId, activeEmitters.size());
                 try {
                     em.complete();
                 } catch (Exception ignored) {
@@ -121,20 +135,24 @@ public class McpServerConfig {
 
         // Callback quando a conexão é finalizada (cliente desconecta ou timeout)
         emitter.onCompletion(() -> {
-            log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+            log.info("[connect] Sessão SSE finalizada: {}. Total de sessões ativas antes da remoção: {}", sessionId, activeEmitters.size());
             activeEmitters.remove(sessionId);
+            log.info("[connect] Sessão {} removida. Total de sessões ativas após remoção: {}", sessionId, activeEmitters.size());
         });
 
         emitter.onTimeout(() -> {
-            log.info("[connect] Sessão SSE expirou por timeout: {}", sessionId);
+            log.info("[connect] Sessão SSE expirou por timeout: {}. Total de sessões ativas antes da remoção: {}", sessionId, activeEmitters.size());
             activeEmitters.remove(sessionId);
+            log.info("[connect] Sessão {} removida por timeout. Total de sessões ativas após remoção: {}", sessionId, activeEmitters.size());
         });
 
         emitter.onError(ex -> {
-            log.warn("[connect] Erro na sessão SSE {}: {}", sessionId, ex.getMessage());
+            log.warn("[connect] Erro na sessão SSE {}: {}. Total de sessões ativas antes da remoção: {}", sessionId, ex.getMessage(), activeEmitters.size());
             activeEmitters.remove(sessionId);
+            log.warn("[connect] Sessão {} removida após erro. Total de sessões ativas após remoção: {}", sessionId, activeEmitters.size());
         });
 
+        log.info("[connect] Retornando SseEmitter para sessão {}. Total de sessões ativas: {}", sessionId, activeEmitters.size());
         return emitter;
     }
 
