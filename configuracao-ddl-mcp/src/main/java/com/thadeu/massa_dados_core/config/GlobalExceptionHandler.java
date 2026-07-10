@@ -141,6 +141,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
         log.error("[handleGeneral] Erro não tratado. Tipo: {}, Mensagem: {}", ex.getClass().getName(), ex.getMessage(), ex);
+        // Log adicional para capturar exceções durante o handshake SSE
+        if (ex.getMessage() != null && ex.getMessage().contains("SseEmitter")) {
+            log.error("[handleGeneral] Exceção relacionada ao SseEmitter detectada. Stack trace completo:", ex);
+        }
         return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, -32603,
                 ex.getMessage() != null ? ex.getMessage() : "Internal server error");
     }

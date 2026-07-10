@@ -98,6 +98,8 @@ public class McpServerConfig {
         // Garantindo o formato exato que o cliente EventFlux espera: "event: endpoint\ndata: <url>\n\n"
         try {
             log.info("[connect] Tentando enviar handshake 'endpoint' para sessão {}", sessionId);
+            // O SseEmitter do Spring adiciona automaticamente "data:" sem espaço.
+            // Para garantir o espaço, adicionamos um espaço no início do valor.
             emitter.send(SseEmitter.event()
                     .name("endpoint")
                     .data(" " + messageEndpointUrl));  // espaço antes da URL para garantir formato correto
