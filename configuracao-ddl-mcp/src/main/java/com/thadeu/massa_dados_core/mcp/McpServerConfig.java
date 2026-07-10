@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 14.0
+ * @version 15.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -68,10 +68,9 @@ public class McpServerConfig {
      * antes de retornar, garantindo que o cliente receba o evento endpoint imediatamente.</p>
      *
      * @param response objeto HttpServletResponse para escrever o stream SSE
-     * @return {@link DeferredResult} que mantém a conexão aberta
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public DeferredResult<Void> connect(HttpServletResponse response) {
+    public void connect(HttpServletResponse response) {
         String sessionId = UUID.randomUUID().toString();
 
         // Configura headers SSE manualmente
@@ -102,40 +101,20 @@ public class McpServerConfig {
         } catch (IOException e) {
             log.error("[connect] Erro ao enviar handshake para sessão {}", sessionId, e);
             activeStreams.remove(sessionId);
-            DeferredResult<Void> errorResult = new DeferredResult<>();
-            errorResult.setErrorResult(e);
-            return errorResult;
+            return;
         }
 
-        // Cria DeferredResult com timeout de 30 minutos
-        DeferredResult<Void> deferredResult = new DeferredResult<>(1_800_000L);
-
-        // Agenda heartbeats a cada 15 segundos para manter a conexão viva
-        heartbeatExecutor.scheduleAtFixedRate(() -> {
-            OutputStream os = activeStreams.get(sessionId);
-            if (os == null) {
-                return;
+        // Mantém a conexão aberta até o cliente desconectar
+        try {
+            while (activeStreams.containsKey(sessionId)) {
+                Thread.sleep(1000);
             }
-            try {
-                synchronized (os) {
-                    // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
-                    os.write(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
-                    os.flush();
-                }
-            } catch (IOException e) {
-                log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
-                activeStreams.remove(sessionId);
-                deferredResult.setResult(null);
-            }
-        }, 15, 15, TimeUnit.SECONDS);
-
-        // Callback quando a conexão é finalizada (cliente desconecta ou timeout)
-        deferredResult.onCompletion(() -> {
-            log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
             activeStreams.remove(sessionId);
-        });
-
-        return deferredResult;
+            log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+        }
     }
 
     /**
