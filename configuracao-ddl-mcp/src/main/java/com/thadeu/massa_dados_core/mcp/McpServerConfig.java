@@ -52,8 +52,8 @@ public class McpServerConfig {
      * @param bodyString corpo da requisição como string JSON
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
-    @PostMapping
-    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody(required = false) String bodyString) {
+    @PostMapping(consumes = "application/json")
+    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody String bodyString) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
         log.debug("[handleMcp] Corpo recebido: {}", bodyString);
 
