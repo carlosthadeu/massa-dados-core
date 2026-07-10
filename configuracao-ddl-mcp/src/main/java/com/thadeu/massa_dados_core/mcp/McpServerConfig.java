@@ -53,9 +53,14 @@ public class McpServerConfig {
      * @return resposta HTTP com resultado ou erro JSON-RPC
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody String bodyString) {
+    public ResponseEntity<Map<String, Object>> handleMcp(@RequestBody(required = false) String bodyString) {
         log.info("[handleMcp] Requisição MCP recebida em /mcp");
         log.debug("[handleMcp] Corpo recebido: {}", bodyString);
+
+        if (bodyString == null || bodyString.trim().isEmpty()) {
+            log.warn("[handleMcp] Corpo da requisição vazio");
+            return handler.errorResponse(-32602, "Corpo da requisição não pode ser vazio", null);
+        }
 
         try {
             JsonNode body = objectMapper.readTree(bodyString);
