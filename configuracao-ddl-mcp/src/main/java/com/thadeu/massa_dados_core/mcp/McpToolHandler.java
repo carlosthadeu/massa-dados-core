@@ -161,11 +161,10 @@ public class McpToolHandler {
         );
 
                 // tools/list precisa retornar result.tools DIRETAMENTE (sem content wrapper)
-        var body = Map.of(
-                "jsonrpc", "2.0",
-                "result", Map.of("tools", tools),
-                "id", id
-        );
+        var body = new java.util.HashMap<String, Object>();
+        body.put("jsonrpc", "2.0");
+        body.put("result", Map.of("tools", tools));
+        body.put("id", id);
         return ServerResponse.ok().body(body);
     }
 
@@ -179,11 +178,10 @@ public class McpToolHandler {
      * @return resposta HTTP 200 com corpo JSON-RPC
      */
     private ServerResponse successResponse(Object result, JsonNode id) {
-        var body = Map.of(
-                "jsonrpc", "2.0",
-                "result", Map.of("content", java.util.List.of(Map.of("type", "text", "text", toJsonString(result)))),
-                "id", id
-        );
+        var body = new java.util.HashMap<String, Object>();
+        body.put("jsonrpc", "2.0");
+        body.put("result", Map.of("content", java.util.List.of(Map.of("type", "text", "text", toJsonString(result)))));
+        body.put("id", id);
         return ServerResponse.ok().body(body);
     }
 
