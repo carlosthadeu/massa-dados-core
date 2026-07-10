@@ -9,10 +9,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.context.request.async.DeferredResult;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
@@ -26,13 +26,13 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Responsabilidades:
  * <ul>
- *   <li>Expor o endpoint {@code GET /mcp} para estabelecer canal SSE via {@link StreamingResponseBody}</li>
+ *   <li>Expor o endpoint {@code GET /mcp} para estabelecer canal SSE via {@link ResponseBodyEmitter}</li>
  *   <li>Expor o endpoint {@code POST /mcp} para receber requisições JSON-RPC</li>
  *   <li>Delegar requisições para o {@link McpToolHandler}</li>
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 11.0
+ * @version 12.0
  */
 @RestController
 @RequestMapping("/mcp")
@@ -44,8 +44,8 @@ public class McpServerConfig {
     private final McpToolHandler handler;
     private final ObjectMapper objectMapper;
 
-    // Armazena o OutputStream de cada sessão ativa para comunicação bidirecional
-    private final ConcurrentHashMap<String, OutputStream> activeStreams = new ConcurrentHashMap<>();
+    // Armazena o ResponseBodyEmitter de cada sessão ativa para comunicação bidirecional
+    private final ConcurrentHashMap<String, ResponseBodyEmitter> activeEmitters = new ConcurrentHashMap<>();
 
     // Executor para envio de heartbeats sem bloquear threads do container
     private final ScheduledExecutorService heartbeatExecutor = Executors.newScheduledThreadPool(2);
@@ -62,19 +62,19 @@ public class McpServerConfig {
     }
 
     /**
-     * Endpoint GET que estabelece o canal SSE usando {@link StreamingResponseBody}.
+     * Endpoint GET que estabelece o canal SSE usando {@link ResponseBodyEmitter}.
      *
      * <p>O Spring gerencia corretamente a resposta assíncrona, liberando a thread
      * do container enquanto mantém a conexão aberta.</p>
      *
      * @param response objeto HttpServletResponse para configurar headers manualmente
-     * @return {@link StreamingResponseBody} que escreve o handshake e mantém a conexão
+     * @return {@link DeferredResult} que contém o {@link ResponseBodyEmitter}
      */
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public StreamingResponseBody connect(HttpServletResponse response) {
+    public DeferredResult<ResponseBodyEmitter> connect(HttpServletResponse response) {
         String sessionId = UUID.randomUUID().toString();
 
-        // Configura headers SSE manualmente antes de retornar o StreamingResponseBody
+        // Configura headers SSE manualmente antes de retornar o DeferredResult
         response.setContentType("text/event-stream");
         response.setCharacterEncoding("UTF-8");
         response.setHeader("Cache-Control", "no-cache");
@@ -86,52 +86,70 @@ public class McpServerConfig {
         // Monta o endpoint que o ChatMCP usará para enviar os comandos POST
         String messageEndpointUrl = "http://localhost:8081/mcp?sessionId=" + sessionId;
 
-        return outputStream -> {
-            activeStreams.put(sessionId, outputStream);
-            log.info("[connect] OutputStream registrado para sessão {}", sessionId);
+        // Cria o DeferredResult com timeout de 30 minutos
+        DeferredResult<ResponseBodyEmitter> deferredResult = new DeferredResult<>(1_800_000L);
 
-            // Envia o handshake inicial (evento "endpoint") diretamente no OutputStream
+        // Cria o ResponseBodyEmitter
+        ResponseBodyEmitter emitter = new ResponseBodyEmitter(1_800_000L);
+
+        activeEmitters.put(sessionId, emitter);
+        log.info("[connect] ResponseBodyEmitter registrado para sessão {}", sessionId);
+
+        // Envia o handshake inicial (evento "endpoint") diretamente no ResponseBodyEmitter
+        try {
             String handshakeEvent = "event: endpoint\ndata: " + messageEndpointUrl + "\n\n";
-            synchronized (outputStream) {
-                outputStream.write(handshakeEvent.getBytes(StandardCharsets.UTF_8));
-                outputStream.flush();
-            }
+            emitter.send(handshakeEvent.getBytes(StandardCharsets.UTF_8), MediaType.TEXT_PLAIN);
             log.info("[connect] Handshake inicial 'endpoint' enviado com sucesso para sessão {}", sessionId);
+        } catch (IOException e) {
+            log.error("[connect] Erro ao enviar handshake para sessão {}", sessionId, e);
+            activeEmitters.remove(sessionId);
+            deferredResult.setErrorResult(e);
+            return deferredResult;
+        }
 
-            // Agenda heartbeats a cada 15 segundos para manter a conexão viva
-            heartbeatExecutor.scheduleAtFixedRate(() -> {
-                OutputStream os = activeStreams.get(sessionId);
-                if (os == null) {
-                    return;
-                }
-                try {
-                    synchronized (os) {
-                        // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
-                        os.write(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8));
-                        os.flush();
-                    }
-                } catch (IOException e) {
-                    log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
-                    activeStreams.remove(sessionId);
-                }
-            }, 15, 15, TimeUnit.SECONDS);
-
-            // Mantém a conexão aberta até o cliente desconectar
-            try {
-                while (activeStreams.containsKey(sessionId)) {
-                    Thread.sleep(1000);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {
-                activeStreams.remove(sessionId);
-                log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+        // Agenda heartbeats a cada 15 segundos para manter a conexão viva
+        heartbeatExecutor.scheduleAtFixedRate(() -> {
+            ResponseBodyEmitter em = activeEmitters.get(sessionId);
+            if (em == null) {
+                return;
             }
-        };
+            try {
+                // Comentário SSE vazio como keep-alive (formato: ": keep-alive\n\n")
+                em.send(": keep-alive\n\n".getBytes(StandardCharsets.UTF_8), MediaType.TEXT_PLAIN);
+            } catch (IOException e) {
+                log.info("[connect] Conexão encerrada pelo cliente para a sessão: {}", sessionId);
+                activeEmitters.remove(sessionId);
+                try {
+                    em.complete();
+                } catch (Exception ignored) {
+                }
+            }
+        }, 15, 15, TimeUnit.SECONDS);
+
+        // Callback quando a conexão é finalizada (cliente desconecta ou timeout)
+        emitter.onCompletion(() -> {
+            log.info("[connect] Sessão SSE finalizada: {}", sessionId);
+            activeEmitters.remove(sessionId);
+        });
+
+        emitter.onTimeout(() -> {
+            log.info("[connect] Sessão SSE expirou por timeout: {}", sessionId);
+            activeEmitters.remove(sessionId);
+        });
+
+        emitter.onError(ex -> {
+            log.warn("[connect] Erro na sessão SSE {}: {}", sessionId, ex.getMessage());
+            activeEmitters.remove(sessionId);
+        });
+
+        // Define o emitter como resultado do DeferredResult
+        deferredResult.setResult(emitter);
+
+        return deferredResult;
     }
 
     /**
-     * Endpoint POST que recebe comandos JSON-RPC e responde no respectivo OutputStream ativo.
+     * Endpoint POST que recebe comandos JSON-RPC e responde no respectivo ResponseBodyEmitter ativo.
      *
      * <p>O ChatMCP envia os comandos via POST com o parâmetro {@code sessionId}
      * na query string. A resposta é enviada de volta pelo canal SSE.</p>
@@ -147,8 +165,8 @@ public class McpServerConfig {
 
         log.info("[handlePost] Requisição recebida para sessão {}", sessionId);
 
-        OutputStream outputStream = activeStreams.get(sessionId);
-        if (outputStream == null) {
+        ResponseBodyEmitter emitter = activeEmitters.get(sessionId);
+        if (emitter == null) {
             log.warn("[handlePost] Nenhuma conexão ativa encontrada para a sessão: {}", sessionId);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
@@ -178,12 +196,9 @@ public class McpServerConfig {
             if (response.getBody() != null) {
                 String responseJson = objectMapper.writeValueAsString(response.getBody());
 
-                // Envia o evento "message" diretamente no OutputStream
+                // Envia o evento "message" diretamente no ResponseBodyEmitter
                 String messageEvent = "event: message\ndata: " + responseJson + "\n\n";
-                synchronized (outputStream) {
-                    outputStream.write(messageEvent.getBytes(StandardCharsets.UTF_8));
-                    outputStream.flush();
-                }
+                emitter.send(messageEvent.getBytes(StandardCharsets.UTF_8), MediaType.TEXT_PLAIN);
                 log.info("[handlePost] Resposta para o método '{}' enviada via SSE", method);
             }
 
@@ -195,10 +210,7 @@ public class McpServerConfig {
                 if (errorBody != null) {
                     String errorJson = objectMapper.writeValueAsString(errorBody);
                     String errorEvent = "event: message\ndata: " + errorJson + "\n\n";
-                    synchronized (outputStream) {
-                        outputStream.write(errorEvent.getBytes(StandardCharsets.UTF_8));
-                        outputStream.flush();
-                    }
+                    emitter.send(errorEvent.getBytes(StandardCharsets.UTF_8), MediaType.TEXT_PLAIN);
                 }
             } catch (IOException ex) {
                 log.error("[handlePost] Erro ao enviar resposta de erro via SSE", ex);
