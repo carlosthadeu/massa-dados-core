@@ -3,6 +3,7 @@ package com.thadeu.massa_dados_core.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -13,7 +14,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * necessário para o Continue chamar via HTTP.</p>
  *
  * @author Thadeu Garrido
- * @version 1.0
+ * @version 2.0
  */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
@@ -32,5 +33,19 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins("*")
                 .allowedMethods("GET", "POST", "OPTIONS")
                 .allowedHeaders("*");
+    }
+
+    /**
+     * Configura o suporte assíncrono para requisições SSE.
+     *
+     * <p>Garante que requisições assíncronas (como o SseEmitter) não percam
+     * as configurações de CORS e tenham timeout adequado.</p>
+     *
+     * @param configurer configurador de suporte assíncrono
+     */
+    @Override
+    public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+        log.info("[configureAsyncSupport] Configurando timeout assíncrono para 30 minutos");
+        configurer.setDefaultTimeout(1800000L); // 30 minutos de timeout padrão
     }
 }
