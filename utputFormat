@@ -1,0 +1,7 @@
+HTTP/1.1 500 
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Fri, 10 Jul 2026 18:13:42 GMT
+Connection: close
+
+{"id":null,"jsonrpc":"2.0","error":{"code":-32603,"message":"Content-Type is not supported"}}

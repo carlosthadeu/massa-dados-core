@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -152,17 +153,33 @@ public class McpUnknownEntityService {
      * @return lista de nomes de tabelas
      * @throws IOException se houver erro ao ler os arquivos
      */
-    private List<String> getExistingTables() throws IOException {
-        Path entityDir = Paths.get(entityClassesPath, "br", "gov", "bnb", "domain", "entity");
-        if (!Files.exists(entityDir)) return List.of();
+        private List<String> getExistingTables() throws IOException {
+        List<String> allTables = new ArrayList<>();
 
-        try (Stream<Path> files = Files.list(entityDir)) {
-            return files
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .map(this::extractTableNameFromFile)
-                    .filter(name -> name != null)
-                    .collect(Collectors.toList());
+        // 1. Escanear entidades manuais (domain.entity)
+        Path manualDir = Paths.get(entityClassesPath, "domain", "entity");
+        if (Files.exists(manualDir)) {
+            try (Stream<Path> files = Files.list(manualDir)) {
+                files.filter(p -> p.toString().endsWith(".java"))
+                     .map(this::extractTableNameFromFile)
+                     .filter(Objects::nonNull)
+                     .forEach(allTables::add);
+            }
         }
+
+        // 2. Escanear entidades geradas (com.thadeu.entities-core.domain.entity)
+        Path generatedDir = Paths.get(entityClassesPath, "com", "thadeu", "entities-core", "domain", "entity");
+        if (Files.exists(generatedDir)) {
+            try (Stream<Path> files = Files.list(generatedDir)) {
+                files.filter(p -> p.toString().endsWith(".java"))
+                     .map(this::extractTableNameFromFile)
+                     .filter(Objects::nonNull)
+                     .forEach(allTables::add);
+            }
+        }
+
+        log.debug("[getExistingTables] Total de tabelas encontradas: {}", allTables.size());
+        return allTables;
     }
 
     /**
@@ -190,33 +207,54 @@ public class McpUnknownEntityService {
      * @return lista de nomes de colunas
      */
     private List<String> getExistingColumns(String tableName) {
-        Path entityDir = Paths.get(entityClassesPath, "br", "gov", "bnb", "domain", "entity");
-        if (!Files.exists(entityDir)) return List.of();
+            List<String> allColumns = new ArrayList<>();
 
-        try (Stream<Path> files = Files.list(entityDir)) {
-            return files
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> {
-                        try {
-                            String content = Files.readString(p);
-                            return content.contains("@Table(name=\"" + tableName + "\")");
-                        } catch (IOException e) {
-                            return false;
-                        }
-                    })
-                    .flatMap(p -> {
-                        try {
-                            String content = Files.readString(p);
-                            return extractColumnNames(content).stream();
-                        } catch (IOException e) {
-                            return Stream.empty();
-                        }
-                    })
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            return List.of();
+            // 1. Escanear entidades manuais (domain.entity)
+            Path manualDir = Paths.get(entityClassesPath, "domain", "entity");
+            allColumns.addAll(scanColumnsFromDir(manualDir, tableName));
+
+            // 2. Escanear entidades geradas (com.thadeu.entities-core.domain.entity)
+            Path generatedDir = Paths.get(entityClassesPath, "com", "thadeu", "entities-core", "domain", "entity");
+            allColumns.addAll(scanColumnsFromDir(generatedDir, tableName));
+
+            log.debug("[getExistingColumns] Total de colunas encontradas para {}: {}", tableName, allColumns.size());
+            return allColumns;
         }
-    }
+
+        /**
+         * Escaneia um diretório em busca de colunas de uma tabela específica.
+         *
+         * @param dir       diretório a ser escaneado
+         * @param tableName nome da tabela procurada
+         * @return lista de nomes de colunas encontradas
+         */
+        private List<String> scanColumnsFromDir(Path dir, String tableName) {
+            if (!Files.exists(dir)) return List.of();
+
+            try (Stream<Path> files = Files.list(dir)) {
+                return files
+                        .filter(p -> p.toString().endsWith(".java"))
+                        .filter(p -> {
+                            try {
+                                String content = Files.readString(p);
+                                return content.contains("@Table(name=\"" + tableName + "\")");
+                            } catch (IOException e) {
+                                return false;
+                            }
+                        })
+                        .flatMap(p -> {
+                            try {
+                                String content = Files.readString(p);
+                                return extractColumnNames(content).stream();
+                            } catch (IOException e) {
+                                return Stream.empty();
+                            }
+                        })
+                        .collect(Collectors.toList());
+            } catch (IOException e) {
+                return List.of();
+            }
+        }
 
     /**
      * Extrai nomes de colunas de um conteúdo Java.

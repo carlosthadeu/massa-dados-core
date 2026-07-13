@@ -115,21 +115,28 @@ public class GlobalExceptionHandler {
                 "Parse error: " + ex.getMessage());
     }
 
-    /**
+        /**
      * Trata exceções de Content-Type não aceitável (Accept header inválido).
      *
-     * <p>Não faz nada para evitar interferir no handshake SSE.
-     * O Spring gerencia isso automaticamente.</p>
+     * <p>Apenas loga o aviso e retorna 406 com Content-Type text/event-stream
+     * para não interromper o handshake SSE do cliente EventFlux.</p>
      *
      * @param ex exceção capturada
-     * @return null para permitir que o Spring lide com a exceção
+     * @return resposta HTTP 406 com Content-Type text/event-stream
      */
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
     public ResponseEntity<Map<String, Object>> handleMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
         log.warn("[handleMediaTypeNotAcceptable] Accept header não suportado: {}", ex.getMessage());
-        // Retorna null para que o Spring continue o processamento normal
-        // e não interrompa o handshake SSE
-        return null;
+        // Retorna 406 com Content-Type text/event-stream para evitar quebrar o SSE
+        Map<String, Object> body = new HashMap<>();
+        body.put("jsonrpc", "2.0");
+        body.put("error", Map.of("code", -32601, "message", "Not acceptable: " + ex.getMessage()));
+        body.put("id", null);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.TEXT_EVENT_STREAM);
+
+        return new ResponseEntity<>(body, headers, HttpStatus.NOT_ACCEPTABLE);
     }
 
     /**
