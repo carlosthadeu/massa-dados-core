@@ -289,6 +289,8 @@ export function gerarInsertEtapa(
  * @param numeroAcao - Número da ação (1..N)
  * @param numeroEtapa - Número da etapa (1..M)
  * @param numeroEntrega - Número da entrega (1..K)
+ * @param mmEnt - Mês da entrega (1-12)
+ * @param pcPljEnt - Percentual de planejamento (0-100)
  * @param valoresFixos - Valores fixos opcionais
  * @returns String SQL do INSERT
  */
@@ -297,18 +299,63 @@ export function gerarInsertEntrega(
   numeroAcao: number,
   numeroEtapa: number,
   numeroEntrega: number,
+  mmEnt: number,
+  pcPljEnt: number,
   valoresFixos?: { stEntAco?: number },
 ): string {
   const stEntAco = valoresFixos?.stEntAco ?? 1;
   const nomeEntrega = `Portfolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')} - Etapa ${String(numeroEtapa).padStart(2, '0')} - Entrega ${String(numeroEntrega).padStart(2, '0')}`;
-  const mmEnt = Math.floor(Math.random() * 12) + 1; // 1..12
-  const pcPljEnt = Math.floor(Math.random() * 101); // 0..100
   return `
     INSERT INTO [dbo].[T696ENAC] 
         ([SQ_ETP_ACO], [MM_ENT], [PC_PLJ_ENT], [PC_REA_ENT], [DE_REA_ENT], [DH_ALT], [MT_USU_ALT], [NM_USU_ALT], [ST_ENT_ACO], [DE_HST], [NT_REV])
     VALUES 
         (@NewEtpID, ${mmEnt}, ${pcPljEnt}, NULL, NULL, GETDATE(), NULL, NULL, ${stEntAco}, NULL, NULL);
   `;
+}
+
+/**
+ * Gera uma lista de meses (1-12) para as entregas de uma etapa.
+ * O primeiro mês é o mês corrente (ou o próximo se o mês corrente já passou).
+ * O último mês não pode estar a mais de 6 meses à frente do primeiro.
+ *
+ * @param quantidade - Número de entregas (2..6)
+ * @returns Array de meses (1-12)
+ */
+export function gerarMeses(quantidade: number): number[] {
+  const mesAtual = new Date().getMonth() + 1; // 1..12
+  const primeiroMes = mesAtual;
+  const ultimoMes = Math.min(primeiroMes + 6, 12);
+  const meses: number[] = [];
+  for (let i = 0; i < quantidade; i++) {
+    const mes = Math.floor(primeiroMes + (i * (ultimoMes - primeiroMes)) / (quantidade - 1));
+    meses.push(mes);
+  }
+  return meses;
+}
+
+/**
+ * Gera uma lista de percentuais (0-100) que somam 100.
+ *
+ * @param quantidade - Número de entregas (2..6)
+ * @returns Array de percentuais (soma = 100)
+ */
+export function gerarPercentuais(quantidade: number): number[] {
+  const valores: number[] = [];
+  let soma = 0;
+  for (let i = 0; i < quantidade; i++) {
+    const valor = Math.floor(Math.random() * 100) + 1; // 1..100
+    valores.push(valor);
+    soma += valor;
+  }
+  // Ajustar para soma = 100
+  const percentuais = valores.map((v) => (v / soma) * 100);
+  // Arredondar para 2 casas decimais
+  const arredondados = percentuais.map((v) => Math.round(v * 100) / 100);
+  // Ajustar o último para garantir soma exata
+  const somaArredondada = arredondados.reduce((acc, v) => acc + v, 0);
+  const diferenca = 100 - somaArredondada;
+  arredondados[arredondados.length - 1] += diferenca;
+  return arredondados;
 }
 ```
 
@@ -324,7 +371,7 @@ Crie `src/index.ts` que:
 Exemplo de estrutura:
 
 ```typescript
-import { gerarCabecalho, gerarInsertEtapa, gerarInsertEntrega } from './utils/sql';
+import { gerarCabecalho, gerarInsertEtapa, gerarInsertEntrega, gerarMeses, gerarPercentuais } from './utils/sql';
 import { gerarInsertAcao } from './templates/acao';
 import { GeradorParams } from './types';
 
@@ -360,9 +407,19 @@ function gerarScript(params: GeradorParams): string {
       );
       script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
       // Gerar entregas para a etapa 1
-      const numEntregas1 = Math.floor(Math.random() * 4) + 2; // 2..5
+      const numEntregas1 = Math.floor(Math.random() * 5) + 2; // 2..6
+      const meses1 = gerarMeses(numEntregas1);
+      const percentuais1 = gerarPercentuais(numEntregas1);
       for (let k = 1; k <= numEntregas1; k++) {
-        script += gerarInsertEntrega(params.destino, i, 1, k, params.valoresFixos);
+        script += gerarInsertEntrega(
+          params.destino,
+          i,
+          1,
+          k,
+          meses1[k - 1],
+          percentuais1[k - 1],
+          params.valoresFixos,
+        );
       }
 
       // Etapa 2 - ano subsequente (2027)
@@ -375,9 +432,19 @@ function gerarScript(params: GeradorParams): string {
       );
       script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
       // Gerar entregas para a etapa 2
-      const numEntregas2 = Math.floor(Math.random() * 4) + 2; // 2..5
+      const numEntregas2 = Math.floor(Math.random() * 5) + 2; // 2..6
+      const meses2 = gerarMeses(numEntregas2);
+      const percentuais2 = gerarPercentuais(numEntregas2);
       for (let k = 1; k <= numEntregas2; k++) {
-        script += gerarInsertEntrega(params.destino, i, 2, k, params.valoresFixos);
+        script += gerarInsertEntrega(
+          params.destino,
+          i,
+          2,
+          k,
+          meses2[k - 1],
+          percentuais2[k - 1],
+          params.valoresFixos,
+        );
       }
 
       // Se houver mais etapas (3..maxEtapas), gerar com anos aleatórios
@@ -391,9 +458,19 @@ function gerarScript(params: GeradorParams): string {
           new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
         );
         script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
-        const numEntregas = Math.floor(Math.random() * 4) + 2; // 2..5
+        const numEntregas = Math.floor(Math.random() * 5) + 2; // 2..6
+        const meses = gerarMeses(numEntregas);
+        const percentuais = gerarPercentuais(numEntregas);
         for (let k = 1; k <= numEntregas; k++) {
-          script += gerarInsertEntrega(params.destino, i, j, k, params.valoresFixos);
+          script += gerarInsertEntrega(
+            params.destino,
+            i,
+            j,
+            k,
+            meses[k - 1],
+            percentuais[k - 1],
+            params.valoresFixos,
+          );
         }
       }
     } else {
@@ -408,9 +485,19 @@ function gerarScript(params: GeradorParams): string {
           new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
         );
         script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
-        const numEntregas = Math.floor(Math.random() * 4) + 2; // 2..5
+        const numEntregas = Math.floor(Math.random() * 5) + 2; // 2..6
+        const meses = gerarMeses(numEntregas);
+        const percentuais = gerarPercentuais(numEntregas);
         for (let k = 1; k <= numEntregas; k++) {
-          script += gerarInsertEntrega(params.destino, i, j, k, params.valoresFixos);
+          script += gerarInsertEntrega(
+            params.destino,
+            i,
+            j,
+            k,
+            meses[k - 1],
+            percentuais[k - 1],
+            params.valoresFixos,
+          );
         }
       }
     }
@@ -477,11 +564,11 @@ const script = gerarScript({ destino, quantidadeAcoes });
 
 ### Geração de Entregas (T696ENAC)
 
-- Para cada etapa criada, devem ser geradas **2 a 5 entregas** (T696ENAC).
+- Para cada etapa criada, devem ser geradas **2 a 6 entregas** (T696ENAC).
 - Nome da entrega: `Portfolio [destino] - Ação Estratégica [NN] - Etapa [NN] - Entrega [NN]`.
 - Campos preenchidos:
-  - `MM_ENT`: mês aleatório (1-12)
-  - `PC_PLJ_ENT`: valor aleatório entre 0 e 100
+  - `MM_ENT`: mês (1-12) seguindo regra de intervalo máximo de 6 meses entre a primeira e a última entrega.
+  - `PC_PLJ_ENT`: valor percentual (0-100) de forma que a soma de todas as entregas da etapa seja **100%**.
   - `PC_REA_ENT`: `NULL`
   - `DE_REA_ENT`: `NULL`
   - `ST_ENT_ACO`: `1` (ativo)
@@ -489,6 +576,22 @@ const script = gerarScript({ destino, quantidadeAcoes });
   - `NT_REV`: `NULL`
 - A função `gerarInsertEntrega()` em `src/utils/sql.ts` é responsável por gerar o INSERT.
 - No `index.ts`, após cada `INSERT` de etapa, deve ser chamado `SET @NewEtpID = SCOPE_IDENTITY();` e então gerar as entregas para essa etapa.
+
+#### Regras para `MM_ENT` (mês)
+
+- O primeiro mês (`MM_ENT`) deve ser o mês corrente (ou o próximo mês, se o mês corrente já passou).
+- O último mês não pode estar a mais de **6 meses** à frente do primeiro mês.
+- Os meses intermediários devem ser distribuídos de forma crescente entre o primeiro e o último.
+
+#### Regras para `PC_PLJ_ENT` (planejamento)
+
+- A soma de todos os `PC_PLJ_ENT` de uma mesma etapa deve ser **100%**.
+- Os valores podem ser gerados aleatoriamente, mas devem ser ajustados para que a soma seja exatamente 100.
+- Sugestão de algoritmo:
+  1. Gerar `n` valores aleatórios entre 1 e 100.
+  2. Calcular a soma total.
+  3. Dividir cada valor pela soma e multiplicar por 100.
+  4. Ajustar o último valor para que a soma seja exatamente 100 (arredondando para 2 casas decimais).
 
 ## Próximos Passos
 
