@@ -223,6 +223,7 @@ export function gerarCabecalho(destino: number): string {
  * @param numeroAcao - Número da ação (1..N)
  * @param numeroEtapa - Número da etapa (1..M)
  * @param valoresFixos - Valores fixos opcionais
+ * @param anoRealizacao - Ano de realização (AA_REA)
  * @returns String SQL do INSERT
  */
 export function gerarInsertEtapa(
@@ -230,16 +231,18 @@ export function gerarInsertEtapa(
   numeroAcao: number,
   numeroEtapa: number,
   valoresFixos?: { stEtpAco?: number; pcReaTot?: number; stRep?: number },
+  anoRealizacao?: number,
 ): string {
   const stEtpAco = valoresFixos?.stEtpAco ?? 1;
   const pcReaTot = valoresFixos?.pcReaTot ?? 0;
   const stRep = valoresFixos?.stRep ?? 0;
   const nomeEtapa = `Portfolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')} - Etapa ${String(numeroEtapa).padStart(2, '0')}`;
+  const aaRea = anoRealizacao ?? new Date().getFullYear();
   return `
     INSERT INTO [dbo].[T696ETAC] 
         ([SQ_ACO_ETT], [CD_UND], [DE_ETP_ACO], [DE_ENT_ETP_ACO], [DH_ALT], [MT_USU_ALT], [NM_USU_ALT], [ST_ETP_ACO], [AA_REA], [PC_REA_TOT], [ST_REP])
     VALUES 
-        (@NewAcoID, NULL, '${nomeEtapa}', NULL, GETDATE(), NULL, NULL, ${stEtpAco}, NULL, ${pcReaTot}, ${stRep});
+        (@NewAcoID, NULL, '${nomeEtapa}', NULL, GETDATE(), NULL, NULL, ${stEtpAco}, ${aaRea}, ${pcReaTot}, ${stRep});
   `;
 }
 ```
@@ -280,9 +283,47 @@ function gerarScript(params: GeradorParams): string {
     script += gerarInsertAcao(params.destino, i, params.valoresFixos);
     script += '\nSET @NewAcoID = SCOPE_IDENTITY();\n';
 
-    const numEtapas = Math.floor(Math.random() * (maxEtapas - minEtapas + 1)) + minEtapas;
-    for (let j = 1; j <= numEtapas; j++) {
-      script += gerarInsertEtapa(params.destino, i, j, params.valoresFixos);
+    // Para a primeira ação, garantir pelo menos 2 etapas com anos específicos
+    if (i === 1) {
+      // Etapa 1 - ano corrente (2026)
+      script += gerarInsertEtapa(
+        params.destino,
+        i,
+        1,
+        params.valoresFixos,
+        new Date().getFullYear(), // 2026
+      );
+      // Etapa 2 - ano subsequente (2027)
+      script += gerarInsertEtapa(
+        params.destino,
+        i,
+        2,
+        params.valoresFixos,
+        new Date().getFullYear() + 1, // 2027
+      );
+      // Se houver mais etapas (3..maxEtapas), gerar com anos aleatórios
+      const numEtapasAdicionais = Math.floor(Math.random() * (maxEtapas - 2 + 1)) + 2; // 2..maxEtapas
+      for (let j = 3; j <= numEtapasAdicionais; j++) {
+        script += gerarInsertEtapa(
+          params.destino,
+          i,
+          j,
+          params.valoresFixos,
+          new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
+        );
+      }
+    } else {
+      // Demais ações: gerar quantidade aleatória de etapas (2..5)
+      const numEtapas = Math.floor(Math.random() * (maxEtapas - minEtapas + 1)) + minEtapas;
+      for (let j = 1; j <= numEtapas; j++) {
+        script += gerarInsertEtapa(
+          params.destino,
+          i,
+          j,
+          params.valoresFixos,
+          new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
+        );
+      }
     }
   }
 
@@ -329,6 +370,14 @@ const script = gerarScript({ destino, quantidadeAcoes });
 - Considere adicionar suporte a parâmetros adicionais, como nomes de tabelas ou colunas, para maior reutilização.
 - Documente o uso do script no próprio arquivo `README.md` dentro da pasta `gerador`.
 - Respeite as regras de formatação, nomenclatura, JSDoc, testes, SOLID e camadas descritas acima.
+
+### Regra Específica para a Primeira Ação
+
+- A **primeira ação** (ação 01) deve ter **pelo menos 2 etapas**.
+- A **etapa 1** deve ter `AA_REA` igual ao **ano corrente** (ex.: 2026).
+- A **etapa 2** deve ter `AA_REA` igual ao **ano subsequente** (ex.: 2027).
+- As demais etapas (se houver) podem ter anos aleatórios entre 2026 e 2028.
+- As demais ações (02 a 05) podem ter quantidade aleatória de etapas (2 a 5) com anos aleatórios entre 2026 e 2028.
 
 ## Próximos Passos
 
