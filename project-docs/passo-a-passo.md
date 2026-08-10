@@ -8,6 +8,8 @@ Criar dois servidores MCP (Model Context Protocol) usando Spring Boot. O primeir
 O segundo servidor (metadados-massa-mcp):
 - Analisa a estrutura da entidade (reflection)
 - Retorna um dicionário de metadados: nome da classe, atributos, tipos, anotações JPA, etc. Que possam responder a uma série de perguntas com o vocabulário de negócio. O que não conseguir resolver, gerar uma demanda para um técnico vir configurar estes metadados e o sistema evoluir.
+- Cria um armazenamento tipo FAQ para evitar processamento de LLM em perguntas semanticamente semelhantes. 
+	- Efetuar somente o acesso aos dados e evitar uso de tokens; (Novo: ainda não foi contemplado no passo a passo)
 - Permite que o cliente chat MCP receba comandos na linguagem do domínio da aplicação e crie a massa de dados. Exemplo: Crie um portfolio com duas ações estratégicas, ano do portfolio 2026, duas etapas em cada ação, com entregas nos meses setembro, outubro e desembro. Pelas entidades ele vai saber onde criar cada registro, mas para o usuário do chat (que é da área e negócio) vai só pedir a massa para a execução das homologações.
 
 ## 🧱 Arquitetura

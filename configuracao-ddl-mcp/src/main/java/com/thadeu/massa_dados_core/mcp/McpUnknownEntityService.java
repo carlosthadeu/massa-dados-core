@@ -153,7 +153,7 @@ public class McpUnknownEntityService {
      * @return lista de nomes de tabelas
      * @throws IOException se houver erro ao ler os arquivos
      */
-        private List<String> getExistingTables() throws IOException {
+        public List<String> getExistingTables() throws IOException {
         List<String> allTables = new ArrayList<>();
 
         // 1. Escanear entidades manuais (domain.entity)

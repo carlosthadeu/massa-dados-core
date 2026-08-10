@@ -1,11 +1,7 @@
 package com.thadeu.massa_dados_core;
 
-import com.thadeu.massa_dados_core.mcp.DdlToolsService;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
 
 /**
  * Classe principal do servidor configuracao-ddl-mcp.
@@ -13,11 +9,17 @@ import org.springframework.context.annotation.Bean;
  * <p>Responsabilidades:
  * <ul>
  *   <li>Inicializar o Spring Boot com scan nos pacotes de entidades JPA</li>
- *   <li>Expor o endpoint MCP para conversao de DDL e identificacao de entidades</li>
+ *   <li>Expor endpoints MCP adaptativos para conversao de DDL e identificacao de entidades</li>
+ * </ul>
+ *
+ * <p>O servidor suporta dois protocolos simultaneamente:
+ * <ul>
+ *   <li><strong>SSE (Server-Sent Events)</strong> - Para clientes como ChatMCP (type: streamable)</li>
+ *   <li><strong>JSON-RPC Stateless</strong> - Para clientes como curl, Postman, etc.</li>
  * </ul>
  *
  * @author Thadeu Garrido
- * @version 1.1
+ * @version 2.0
  */
 @SpringBootApplication(scanBasePackages = {
     "com.thadeu.massa_dados_core",
@@ -32,12 +34,5 @@ public class App {
      */
     public static void main(String[] args) {
         SpringApplication.run(App.class, args);
-    }
-
-    @Bean
-    ToolCallbackProvider tools(DdlToolsService ddlToolsService) {
-        return MethodToolCallbackProvider.builder()
-                .toolObjects(ddlToolsService)
-                .build();
     }
 }
