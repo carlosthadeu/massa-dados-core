@@ -281,6 +281,35 @@ export function gerarInsertEtapa(
         (@NewAcoID, NULL, '${nomeEtapa}', '${descricaoEtapa}', GETDATE(), NULL, NULL, ${stEtpAco}, ${aaRea}, ${pcReaTot}, ${stRep});
   `;
 }
+
+/**
+ * Gera o INSERT para uma entrega (T696ENAC).
+ *
+ * @param destino - ID do portfólio de destino
+ * @param numeroAcao - Número da ação (1..N)
+ * @param numeroEtapa - Número da etapa (1..M)
+ * @param numeroEntrega - Número da entrega (1..K)
+ * @param valoresFixos - Valores fixos opcionais
+ * @returns String SQL do INSERT
+ */
+export function gerarInsertEntrega(
+  destino: number,
+  numeroAcao: number,
+  numeroEtapa: number,
+  numeroEntrega: number,
+  valoresFixos?: { stEntAco?: number },
+): string {
+  const stEntAco = valoresFixos?.stEntAco ?? 1;
+  const nomeEntrega = `Portfolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')} - Etapa ${String(numeroEtapa).padStart(2, '0')} - Entrega ${String(numeroEntrega).padStart(2, '0')}`;
+  const mmEnt = Math.floor(Math.random() * 12) + 1; // 1..12
+  const pcPljEnt = Math.floor(Math.random() * 101); // 0..100
+  return `
+    INSERT INTO [dbo].[T696ENAC] 
+        ([SQ_ETP_ACO], [MM_ENT], [PC_PLJ_ENT], [PC_REA_ENT], [DE_REA_ENT], [DH_ALT], [MT_USU_ALT], [NM_USU_ALT], [ST_ENT_ACO], [DE_HST], [NT_REV])
+    VALUES 
+        (@NewEtpID, ${mmEnt}, ${pcPljEnt}, NULL, NULL, GETDATE(), NULL, NULL, ${stEntAco}, NULL, NULL);
+  `;
+}
 ```
 
 ### 5. Lógica Principal (index.ts)
@@ -295,7 +324,7 @@ Crie `src/index.ts` que:
 Exemplo de estrutura:
 
 ```typescript
-import { gerarCabecalho, gerarInsertEtapa } from './utils/sql';
+import { gerarCabecalho, gerarInsertEtapa, gerarInsertEntrega } from './utils/sql';
 import { gerarInsertAcao } from './templates/acao';
 import { GeradorParams } from './types';
 
@@ -329,6 +358,13 @@ function gerarScript(params: GeradorParams): string {
         params.valoresFixos,
         new Date().getFullYear(), // 2026
       );
+      script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
+      // Gerar entregas para a etapa 1
+      const numEntregas1 = Math.floor(Math.random() * 4) + 2; // 2..5
+      for (let k = 1; k <= numEntregas1; k++) {
+        script += gerarInsertEntrega(params.destino, i, 1, k, params.valoresFixos);
+      }
+
       // Etapa 2 - ano subsequente (2027)
       script += gerarInsertEtapa(
         params.destino,
@@ -337,6 +373,13 @@ function gerarScript(params: GeradorParams): string {
         params.valoresFixos,
         new Date().getFullYear() + 1, // 2027
       );
+      script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
+      // Gerar entregas para a etapa 2
+      const numEntregas2 = Math.floor(Math.random() * 4) + 2; // 2..5
+      for (let k = 1; k <= numEntregas2; k++) {
+        script += gerarInsertEntrega(params.destino, i, 2, k, params.valoresFixos);
+      }
+
       // Se houver mais etapas (3..maxEtapas), gerar com anos aleatórios
       const numEtapasAdicionais = Math.floor(Math.random() * (maxEtapas - 2 + 1)) + 2; // 2..maxEtapas
       for (let j = 3; j <= numEtapasAdicionais; j++) {
@@ -347,6 +390,11 @@ function gerarScript(params: GeradorParams): string {
           params.valoresFixos,
           new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
         );
+        script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
+        const numEntregas = Math.floor(Math.random() * 4) + 2; // 2..5
+        for (let k = 1; k <= numEntregas; k++) {
+          script += gerarInsertEntrega(params.destino, i, j, k, params.valoresFixos);
+        }
       }
     } else {
       // Demais ações: gerar quantidade aleatória de etapas (2..5)
@@ -359,6 +407,11 @@ function gerarScript(params: GeradorParams): string {
           params.valoresFixos,
           new Date().getFullYear() + Math.floor(Math.random() * 3), // 2026..2028
         );
+        script += '\nSET @NewEtpID = SCOPE_IDENTITY();\n';
+        const numEntregas = Math.floor(Math.random() * 4) + 2; // 2..5
+        for (let k = 1; k <= numEntregas; k++) {
+          script += gerarInsertEntrega(params.destino, i, j, k, params.valoresFixos);
+        }
       }
     }
   }
@@ -421,6 +474,21 @@ const script = gerarScript({ destino, quantidadeAcoes });
 - O texto deve conter **dois parágrafos**, cada um com **50 caracteres** (aproximadamente).
 - A função `gerarLoremIpsum()` em `src/utils/sql.ts` é responsável por gerar esse texto.
 - O texto gerado é inserido no campo `DE_ENT_ETP_ACO` (descrição da entrega da etapa) no INSERT da etapa.
+
+### Geração de Entregas (T696ENAC)
+
+- Para cada etapa criada, devem ser geradas **2 a 5 entregas** (T696ENAC).
+- Nome da entrega: `Portfolio [destino] - Ação Estratégica [NN] - Etapa [NN] - Entrega [NN]`.
+- Campos preenchidos:
+  - `MM_ENT`: mês aleatório (1-12)
+  - `PC_PLJ_ENT`: valor aleatório entre 0 e 100
+  - `PC_REA_ENT`: `NULL`
+  - `DE_REA_ENT`: `NULL`
+  - `ST_ENT_ACO`: `1` (ativo)
+  - `DE_HST`: `NULL`
+  - `NT_REV`: `NULL`
+- A função `gerarInsertEntrega()` em `src/utils/sql.ts` é responsável por gerar o INSERT.
+- No `index.ts`, após cada `INSERT` de etapa, deve ser chamado `SET @NewEtpID = SCOPE_IDENTITY();` e então gerar as entregas para essa etapa.
 
 ## Próximos Passos
 
