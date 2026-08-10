@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Criar um script TypeScript que, a partir de parâmetros de entrada (portfólio de origem, portfólio de destino, etc.), gere automaticamente um script SQL de clonagem de portfólio, similar ao arquivo `clonar portfolio S696.sql`.
+Criar um script TypeScript que, a partir de parâmetros de entrada (portfólio de destino, quantidade de ações, etc.), gere automaticamente um script SQL que **cria** 5 ações estratégicas, cada uma com 2 a 5 etapas, com nomes padronizados, sem depender de um portfólio de origem.
 
 ## Pré-requisitos
 
@@ -14,7 +14,7 @@ Criar um script TypeScript que, a partir de parâmetros de entrada (portfólio d
 
 ```
 geracao-massa-sql/
-├── clonar portfolio S696.sql          (script SQL existente)
+├── clonar portfolio S696.sql          (script SQL existente - referência)
 ├── analise-sql.md                     (análise existente)
 ├── plano-gerador-script.md            (este arquivo)
 ├── gerador/
@@ -25,7 +25,7 @@ geracao-massa-sql/
 │   │   ├── templates/
 │   │   │   ├── acao.ts                (template para inserção de ações)
 │   │   │   ├── etapa.ts               (template para inserção de etapas)
-│   │   │   └── entrega.ts             (template para inserção de entregas)
+│   │   │   └── entrega.ts             (template para inserção de entregas - opcional)
 │   │   ├── utils/
 │   │   │   ├── sql.ts                 (funções auxiliares para geração de SQL)
 │   │   │   └── validators.ts          (validação de parâmetros)
@@ -131,10 +131,14 @@ Crie o arquivo `src/types.ts` com as interfaces que representam os parâmetros d
  * Parâmetros de entrada para o gerador de scripts SQL.
  */
 export interface GeradorParams {
-  /** ID do portfólio de origem */
-  origem: number;
   /** ID do portfólio de destino */
   destino: number;
+  /** Quantidade de ações a criar (padrão: 5) */
+  quantidadeAcoes?: number;
+  /** Quantidade mínima de etapas por ação (padrão: 2) */
+  minEtapas?: number;
+  /** Quantidade máxima de etapas por ação (padrão: 5) */
+  maxEtapas?: number;
   /** Valores fixos que podem ser sobrescritos */
   valoresFixos?: {
     stAcoEtt?: number;
@@ -173,25 +177,23 @@ Crie arquivos de template para cada parte do script SQL. Por exemplo, `src/templ
 /**
  * Gera o INSERT para uma ação (T696ACES).
  *
- * @param origem - ID do portfólio de origem
  * @param destino - ID do portfólio de destino
- * @param colunas - Lista de colunas a inserir
- * @param valores - Lista de valores correspondentes
+ * @param numeroAcao - Número sequencial da ação (1..N)
+ * @param valoresFixos - Valores fixos opcionais
  * @returns String SQL do INSERT
  */
 export function gerarInsertAcao(
-  origem: number,
   destino: number,
-  colunas: string[],
-  valores: string[],
+  numeroAcao: number,
+  valoresFixos?: { stAcoEtt?: number },
 ): string {
+  const stAcoEtt = valoresFixos?.stAcoEtt ?? 10;
+  const nomeAcao = `Portifolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')}`;
   return `
     INSERT INTO [dbo].[T696ACES] 
-        (${colunas.join(', ')})
-    SELECT 
-        ${valores.join(', ')}
-    FROM [dbo].[T696ACES] 
-    WHERE [SQ_ACO_ETT] = @OldAcoID;
+        ([NM_ACO_ETT], [DE_ACO_ETT], [SQ_ORI_ACO], [CD_UND], [DH_LIM], [MT_USU_ALT], [NM_USU_ALT], [DH_ALT], [ST_ACO_ETT], [DE_HST], [MT_USU_RSP], [CD_UND_APR], [SQ_PTF_ACO], [TP_ACO_ETT])
+    VALUES 
+        ('${nomeAcao}', NULL, NULL, NULL, NULL, NULL, NULL, GETDATE(), ${stAcoEtt}, NULL, NULL, NULL, ${destino}, NULL);
   `;
 }
 ```
@@ -204,27 +206,40 @@ Crie `src/utils/sql.ts` com funções para montar as partes do script:
 /**
  * Gera o cabeçalho do script com os parâmetros de controle.
  *
- * @param origem - ID do portfólio de origem
  * @param destino - ID do portfólio de destino
  * @returns String com o cabeçalho SQL
  */
-export function gerarCabecalho(origem: number, destino: number): string {
+export function gerarCabecalho(destino: number): string {
   return `
     -- Parâmetros de controle
-    DECLARE @SQ_PTF_ACO_ORIGEM INT = ${origem};
     DECLARE @SQ_PTF_ACO_DESTINO INT = ${destino};
   `;
 }
 
 /**
- * Gera o cursor para percorrer as ações do portfólio de origem.
+ * Gera o INSERT para uma etapa (T696ETAC).
  *
- * @returns String com o cursor SQL
+ * @param destino - ID do portfólio de destino
+ * @param numeroAcao - Número da ação (1..N)
+ * @param numeroEtapa - Número da etapa (1..M)
+ * @param valoresFixos - Valores fixos opcionais
+ * @returns String SQL do INSERT
  */
-export function gerarCursorAcoes(): string {
+export function gerarInsertEtapa(
+  destino: number,
+  numeroAcao: number,
+  numeroEtapa: number,
+  valoresFixos?: { stEtpAco?: number; pcReaTot?: number; stRep?: number },
+): string {
+  const stEtpAco = valoresFixos?.stEtpAco ?? 1;
+  const pcReaTot = valoresFixos?.pcReaTot ?? 0;
+  const stRep = valoresFixos?.stRep ?? 0;
+  const nomeEtapa = `Portfolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')} - Etapa ${String(numeroEtapa).padStart(2, '0')}`;
   return `
-    DECLARE C_Acoes CURSOR FOR 
-    SELECT SQ_ACO_ETT FROM [dbo].[T696ACES] WHERE SQ_PTF_ACO = @SQ_PTF_ACO_ORIGEM;
+    INSERT INTO [dbo].[T696ETAC] 
+        ([SQ_ACO_ETT], [CD_UND], [DE_ETP_ACO], [DE_ENT_ETP_ACO], [DH_ALT], [MT_USU_ALT], [NM_USU_ALT], [ST_ETP_ACO], [AA_REA], [PC_REA_TOT], [ST_REP])
+    VALUES 
+        (@NewAcoID, NULL, '${nomeEtapa}', NULL, GETDATE(), NULL, NULL, ${stEtpAco}, NULL, ${pcReaTot}, ${stRep});
   `;
 }
 ```
@@ -241,7 +256,7 @@ Crie `src/index.ts` que:
 Exemplo de estrutura:
 
 ```typescript
-import { gerarCabecalho, gerarCursorAcoes } from './utils/sql';
+import { gerarCabecalho, gerarInsertEtapa } from './utils/sql';
 import { gerarInsertAcao } from './templates/acao';
 import { GeradorParams } from './types';
 
@@ -252,23 +267,40 @@ import { GeradorParams } from './types';
  * @returns String com o script SQL
  */
 function gerarScript(params: GeradorParams): string {
-  const cabecalho = gerarCabecalho(params.origem, params.destino);
-  const cursor = gerarCursorAcoes();
-  // ... montar o restante do script
-  return `${cabecalho}\n${cursor}\n...`;
+  const cabecalho = gerarCabecalho(params.destino);
+  const quantidadeAcoes = params.quantidadeAcoes ?? 5;
+  const minEtapas = params.minEtapas ?? 2;
+  const maxEtapas = params.maxEtapas ?? 5;
+
+  let script = cabecalho;
+  script += '\n\n-- Início da criação de ações e etapas\n';
+
+  for (let i = 1; i <= quantidadeAcoes; i++) {
+    script += `\n-- Ação ${i}\n`;
+    script += gerarInsertAcao(params.destino, i, params.valoresFixos);
+    script += '\nSET @NewAcoID = SCOPE_IDENTITY();\n';
+
+    const numEtapas = Math.floor(Math.random() * (maxEtapas - minEtapas + 1)) + minEtapas;
+    for (let j = 1; j <= numEtapas; j++) {
+      script += gerarInsertEtapa(params.destino, i, j, params.valoresFixos);
+    }
+  }
+
+  script += '\nPRINT \'Carga de massa de dados realizada.\';\n';
+  return script;
 }
 
 // Leitura de argumentos da linha de comando
 const args = process.argv.slice(2);
-const origem = parseInt(args[0], 10);
-const destino = parseInt(args[1], 10);
+const destino = parseInt(args[0], 10);
+const quantidadeAcoes = args[1] ? parseInt(args[1], 10) : 5;
 
-if (isNaN(origem) || isNaN(destino)) {
-  console.error('Uso: node dist/index.js <origem> <destino>');
+if (isNaN(destino)) {
+  console.error('Uso: node dist/index.js <destino> [quantidadeAcoes]');
   process.exit(1);
 }
 
-const script = gerarScript({ origem, destino });
+const script = gerarScript({ destino, quantidadeAcoes });
 // Salvar em arquivo
 ```
 
@@ -280,7 +312,7 @@ const script = gerarScript({ origem, destino });
   ```
 - Execute o script gerado:
   ```bash
-  node dist/index.js 56 99
+  node dist/index.js 99 5
   ```
 - O arquivo SQL gerado será salvo em `gerador/output/`.
 
@@ -301,6 +333,6 @@ const script = gerarScript({ origem, destino });
 ## Próximos Passos
 
 1. Implementar a estrutura básica descrita acima.
-2. Testar a geração de um script SQL idêntico ao fornecido.
+2. Testar a geração de um script SQL que cria 5 ações com 2 a 5 etapas cada.
 3. Adicionar validações e tratamento de erros.
 4. (Opcional) Criar uma interface de linha de comando mais amigável (ex.: usando `commander`).
