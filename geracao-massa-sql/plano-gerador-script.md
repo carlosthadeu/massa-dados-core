@@ -217,6 +217,41 @@ export function gerarCabecalho(destino: number): string {
 }
 
 /**
+ * Gera um texto lorem ipsum com dois parágrafos de 50 caracteres cada.
+ *
+ * @returns String com lorem ipsum
+ */
+export function gerarLoremIpsum(): string {
+  const palavras = [
+    'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing',
+    'elit', 'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore',
+    'et', 'dolore', 'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam',
+    'quis', 'nostrud', 'exercitation', 'ullamco', 'laboris', 'nisi', 'ut',
+    'aliquip', 'ex', 'ea', 'commodo', 'consequat', 'duis', 'aute', 'irure',
+    'in', 'reprehenderit', 'in', 'voluptate', 'velit', 'esse', 'cillum',
+    'dolore', 'eu', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint',
+    'occaecat', 'cupidatat', 'non', 'proident', 'sunt', 'in', 'culpa',
+    'qui', 'officia', 'deserunt', 'mollit', 'anim', 'id', 'est', 'laborum'
+  ];
+
+  const gerarParagrafo = (): string => {
+    let texto = '';
+    while (texto.length < 50) {
+      const palavra = palavras[Math.floor(Math.random() * palavras.length)];
+      if (texto.length + palavra.length + 1 > 50) {
+        break;
+      }
+      texto += (texto ? ' ' : '') + palavra;
+    }
+    return texto;
+  };
+
+  const paragrafo1 = gerarParagrafo();
+  const paragrafo2 = gerarParagrafo();
+  return `${paragrafo1}\n\n${paragrafo2}`;
+}
+
+/**
  * Gera o INSERT para uma etapa (T696ETAC).
  *
  * @param destino - ID do portfólio de destino
@@ -238,11 +273,12 @@ export function gerarInsertEtapa(
   const stRep = valoresFixos?.stRep ?? 0;
   const nomeEtapa = `Portfolio ${destino} - Ação Estratégica ${String(numeroAcao).padStart(2, '0')} - Etapa ${String(numeroEtapa).padStart(2, '0')}`;
   const aaRea = anoRealizacao ?? new Date().getFullYear();
+  const descricaoEtapa = gerarLoremIpsum();
   return `
     INSERT INTO [dbo].[T696ETAC] 
         ([SQ_ACO_ETT], [CD_UND], [DE_ETP_ACO], [DE_ENT_ETP_ACO], [DH_ALT], [MT_USU_ALT], [NM_USU_ALT], [ST_ETP_ACO], [AA_REA], [PC_REA_TOT], [ST_REP])
     VALUES 
-        (@NewAcoID, NULL, '${nomeEtapa}', NULL, GETDATE(), NULL, NULL, ${stEtpAco}, ${aaRea}, ${pcReaTot}, ${stRep});
+        (@NewAcoID, NULL, '${nomeEtapa}', '${descricaoEtapa}', GETDATE(), NULL, NULL, ${stEtpAco}, ${aaRea}, ${pcReaTot}, ${stRep});
   `;
 }
 ```
@@ -378,6 +414,13 @@ const script = gerarScript({ destino, quantidadeAcoes });
 - A **etapa 2** deve ter `AA_REA` igual ao **ano subsequente** (ex.: 2027).
 - As demais etapas (se houver) podem ter anos aleatórios entre 2026 e 2028.
 - As demais ações (02 a 05) podem ter quantidade aleatória de etapas (2 a 5) com anos aleatórios entre 2026 e 2028.
+
+### Geração de Lorem Ipsum para `DE_ETP_ACO`
+
+- O campo `DE_ETP_ACO` (descrição da etapa) deve ser preenchido com um texto **lorem ipsum** gerado aleatoriamente.
+- O texto deve conter **dois parágrafos**, cada um com **50 caracteres** (aproximadamente).
+- A função `gerarLoremIpsum()` em `src/utils/sql.ts` é responsável por gerar esse texto.
+- O texto gerado é inserido no campo `DE_ENT_ETP_ACO` (descrição da entrega da etapa) no INSERT da etapa.
 
 ## Próximos Passos
 
