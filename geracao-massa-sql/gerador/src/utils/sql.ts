@@ -26,8 +26,10 @@ export function gerarLoremIpsum(): string {
  * @param quantidade - Quantidade de entregas a gerar (mínimo 1, máximo 6)
  */
 export function gerarMeses(quantidade: number): number[] {
+  if (quantidade <= 0) return [];
+  
   // Limita a quantidade entre 1 e 6 para garantir que caiba no intervalo de 6 meses
-  const totalEntregas = Math.min(Math.max(quantidade, 1), 6);
+  const totalEntregas = Math.min(quantidade, 6);
   
   // A janela total permitida é de no máximo 6 meses (ex: do mês 3 ao 8, diff = 5)
   const tamanhoJanela = 6; 
