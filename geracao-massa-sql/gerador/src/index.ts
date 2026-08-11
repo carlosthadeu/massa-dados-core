@@ -1,3 +1,12 @@
+/**
+ * Módulo principal do gerador de massa de dados SQL.
+ *
+ * Funcionalidades:
+ * - Gera script SQL para criação de ações, vínculos, domínios, etapas e entregas.
+ * - Permite configurar quantidade de ações, etapas e valores fixos.
+ *
+ * @module index
+ */
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -12,6 +21,21 @@ import { gerarInsertVinculoAcao } from './templates/vinculoAcao.js';
 import { gerarInsertDominioAcao } from './templates/dominioAcao.js';
 import { GeradorParams } from './types.js';
 
+/**
+ * Gera o bloco SQL de entregas para uma determinada ação e etapa.
+ *
+ * @param destino - Código do destino (PTF).
+ * @param numeroAcao - Número da ação.
+ * @param numeroEtapa - Número da etapa.
+ * @param valoresFixos - Valores fixos opcionais para as entregas.
+ * @returns String contendo os comandos INSERT das entregas.
+ *
+ * @example
+ * ```typescript
+ * const bloco = gerarBlocoEntregas(78, 1, 1);
+ * // => string com INSERTs de entregas
+ * ```
+ */
 function gerarBlocoEntregas(
   destino: number,
   numeroAcao: number,
@@ -37,6 +61,18 @@ function gerarBlocoEntregas(
   return bloco;
 }
 
+/**
+ * Gera o script SQL completo para a carga de massa de dados.
+ *
+ * @param params - Parâmetros de geração (destino, quantidade de ações, etc.).
+ * @returns String contendo o script SQL completo.
+ *
+ * @example
+ * ```typescript
+ * const script = gerarScript({ destino: 78, quantidadeAcoes: 10 });
+ * // => string com script SQL
+ * ```
+ */
 export function gerarScript(params: GeradorParams): string {
   const cabecalho = gerarCabecalho(params.destino);
   const quantidadeAcoes = params.quantidadeAcoes ?? 5;
@@ -128,6 +164,19 @@ export function gerarScript(params: GeradorParams): string {
   return script;
 }
 
+/**
+ * Execução via linha de comando.
+ *
+ * Uso:
+ * ```
+ * node dist/index.js <destino> [quantidadeAcoes]
+ * ```
+ *
+ * Exemplo:
+ * ```
+ * node dist/index.js 78 10
+ * ```
+ */
 const args = process.argv.slice(2);
 if (args.length > 0) {
   const destino = parseInt(args[0], 10);
