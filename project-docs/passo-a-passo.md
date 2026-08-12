@@ -3,7 +3,8 @@
 ## 🎯 Objetivo
 Criar dois servidores MCP (Model Context Protocol) usando Spring Boot. O primeiro servidor (configuracao-ddl-mcp):
 - Recebe uma configuração via application.properties informando onde estão as classes entities
-- Disponibiliza ao chat-mcp a funcionalidade de ao receber um script ddl, atualizar as classes entities do segundo servidor e recompilar;
+-Disponibiliza ao chat-mcp a funcionalidade de ao receber um script ddl, atualizar as classes entities do segundo servidor e recompilar;
+- Gera as classes para as automações de teste: lê a estrutura do banco e cria ou altera classes das ferramentas de automação (Cucumber, Selenium, Cypress) para evitar obsolecência;
 
 O segundo servidor (metadados-massa-mcp):
 - Analisa a estrutura da entidade (reflection)
@@ -18,11 +19,15 @@ Cliente MCP (Continue)
     ↓ (JSON-RPC via HTTP, endpoint /mcp)
 configuracao-ddl-mcp — Configuração e DDL (Spring Boot, porta 8081)
     ├── McpServerConfig (configuração do protocolo MCP)
-    ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities")
+    ├── McpToolHandler (ferramentas: "ddl_to_entity", "identify_unknown_entities", "generate_test_automation")
     ├── McpDdlToEntityService (conversão de DDL para classes Entity)
     ├── McpUnknownEntityService (identificação de classes/atributos não reconhecidos)
     ├── McpCompileService (recompilação do Servidor 2 via ProcessBuilder)
-    └── dto/ (DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse)
+    ├── McpTestAutomationService (geração/atualização de classes para automação de testes)
+    │   ├── McpTestAutomationCucumber (gerador de classes Cucumber — Steps, Page Objects, Features)
+    │   ├── McpTestAutomationSelenium (gerador de classes Selenium — Page Objects, Page Factory)
+    │   └── McpTestAutomationCypress (gerador de classes Cypress — Commands, Page Objects, Specs)
+    └── dto/ (DdlRequest, DdlResponse, UnknownEntityRequest, UnknownEntityResponse, TestAutomationRequest, TestAutomationResponse)
         ↓ (chamada interna para recompilar)
 metadados-massa-mcp — Metadados e Massa de Dados (Spring Boot, porta 8082)
     ├── McpServerConfig (configuração do protocolo MCP)
@@ -113,6 +118,34 @@ public record MissingColumnInfo(
     String columnName,
     String columnType,
     boolean nullable
+) {}
+```
+
+#### TestAutomationRequest
+```java
+public record TestAutomationRequest(
+    String entityName,          // Nome da entidade (ex: "Portfolio")
+    String toolType             // "CUCUMBER", "SELENIUM" ou "CYPRESS"
+) {}
+```
+
+#### TestAutomationResponse
+```java
+public record TestAutomationResponse(
+    String entityName,
+    String toolType,
+    List<AutomationClassInfo> generatedClasses  // Lista de classes geradas/atualizadas
+) {}
+```
+
+#### AutomationClassInfo
+```java
+public record AutomationClassInfo(
+    String className,
+    String filePath,
+    String classCode,
+    boolean created,            // true = criada, false = atualizada
+    List<String> changes        // Lista de alterações realizadas (ex: "Adicionado campo nome")
 ) {}
 ```
 
@@ -396,9 +429,212 @@ public class McpCompileService {
         }
     }
     
-    public record CompileResult(boolean success, String message) {}
+        public record CompileResult(boolean success, String message) {}
 }
 ```
+
+### Fase 5.5 — Geração de Classes para Automação de Testes
+
+**Objetivo:** Gerar ou atualizar automaticamente as classes das ferramentas de automação (Cucumber, Selenium, Cypress) a partir da estrutura do banco/entidades, evitando obsolecência.
+
+- [ ] 5.5.1 Criar serviço `McpTestAutomationService.java` no Servidor 1 que:
+  - Lê a estrutura das entidades (via metadados do Servidor 2 ou reflection)
+  - Identifica as ferramentas de automação configuradas (Cucumber, Selenium, Cypress)
+  - Gera ou atualiza classes de automação para cada ferramenta
+  - Evita obsolecência: quando o banco/entidade mudar, as classes de automação são atualizadas automaticamente
+- [ ] 5.5.2 Criar gerador para **Cucumber**:
+  - `McpTestAutomationCucumber.java` — gera:
+    - Classes de Steps (Passos de negócio)
+    - Page Objects
+    - Arquivos `.feature` com cenários de CRUD básico
+- [ ] 5.5.3 Criar gerador para **Selenium**:
+  - `McpTestAutomationSelenium.java` — gera:
+    - Page Objects com Page Factory
+    - Classes de teste base (TestNG ou JUnit)
+- [ ] 5.5.4 Criar gerador para **Cypress**:
+  - `McpTestAutomationCypress.java` — gera:
+    - Comandos customizados (commands.js)
+    - Page Objects
+    - Specs de teste básicos
+- [ ] 5.5.5 Criar DTOs no pacote `mcp/dto/` do Servidor 1:
+  - `TestAutomationRequest.java` — record com campos `entityName` (String) e `toolType` (String)
+  - `TestAutomationResponse.java` — record com entityName, toolType e lista de classes geradas/atualizadas
+  - `AutomationClassInfo.java` — record com className, filePath, classCode, created (boolean), changes (List<String>)
+- [ ] 5.5.6 Criar ferramenta MCP `generate_test_automation` no Servidor 1 que:
+  - Recebe o nome da entidade e o tipo de ferramenta
+  - Gera ou atualiza as classes de automação
+  - Retorna lista de arquivos criados/alterados
+- [ ] 5.5.7 Configurar diretório de destino das classes de automação no `application.properties`:
+  - `automation.cucumber.path` — caminho do projeto de automação Cucumber
+  - `automation.selenium.path` — caminho do projeto de automação Selenium
+  - `automation.cypress.path` — caminho do projeto de automação Cypress
+- [ ] 5.5.8 Integrar com `identify_unknown_entities`: quando o DDL indicar mudanças, sugerir também atualização das classes de automação
+- [ ] 5.5.9 Testar geração para cada ferramenta com as entidades existentes
+
+#### Detalhamento do `McpTestAutomationService`
+
+```java
+@Service
+public class McpTestAutomationService {
+
+    @Value("${automation.cucumber.path:}")
+    private String cucumberPath;
+
+    @Value("${automation.selenium.path:}")
+    private String seleniumPath;
+
+    @Value("${automation.cypress.path:}")
+    private String cypressPath;
+
+    private final McpEntityMetadataService metadataService;
+    private final McpTestAutomationCucumber cucumberGenerator;
+    private final McpTestAutomationSelenium seleniumGenerator;
+    private final McpTestAutomationCypress cypressGenerator;
+
+    public TestAutomationResponse generate(String entityName, String toolType) {
+        // 1. Obter metadados da entidade
+        EntityMetadataResponse metadata = metadataService.getMetadata(entityName);
+        
+        // 2. Selecionar o gerador adequado
+        TestAutomationGenerator generator = switch (toolType.toLowerCase()) {
+            case "cucumber" -> cucumberGenerator;
+            case "selenium" -> seleniumGenerator;
+            case "cypress" -> cypressGenerator;
+            default -> throw new IllegalArgumentException("Ferramenta não suportada: " + toolType);
+        };
+        
+        // 3. Gerar/atualizar classes de automação
+        return generator.generate(metadata);
+    }
+
+    public interface TestAutomationGenerator {
+        TestAutomationResponse generate(EntityMetadataResponse metadata);
+    }
+}
+```
+
+#### Exemplo de classe gerada para Cucumber (Steps)
+
+```java
+public class PortfolioSteps {
+
+    @Autowired
+    private PortfolioPage portfolioPage;
+
+    @Given("que acesso o portfólio {string}")
+    public void acessoPortfolio(String nome) {
+        portfolioPage.acessarPortfolio(nome);
+    }
+
+    @When("criar um novo portfólio com ano {int}")
+    public void criarPortfolio(Integer ano) {
+        portfolioPage.criarPortfolio(ano);
+    }
+
+    @Then("o portfólio é exibido na listagem")
+    public void validarExibicao() {
+        portfolioPage.validarPortfolioCriado();
+    }
+}
+
+public class PortfolioPage {
+
+    private WebDriver driver;
+
+    @FindBy(id = "nmPortfolio")
+    private WebElement campoNome;
+
+    public void criarPortfolio(String nome, Integer ano) {
+        campoNome.sendKeys(nome);
+        campoAno.sendKeys(ano.toString());
+        botaoSalvar.click();
+    }
+}
+```
+
+#### Exemplo de classe gerada para Selenium (Page Object)
+
+```java
+public class PortfolioPage {
+
+    protected WebDriver driver;
+
+    @FindBy(id = "nmPortfolio")
+    private WebElement nomeInput;
+
+    @FindBy(id = "anoRealizacao")
+    private WebElement anoInput;
+
+    @FindBy(id = "situacao")
+    private WebElement situacaoSelect;
+
+    public PortfolioPage(WebDriver driver) {
+        this.driver = driver;
+        PageFactory.initElements(driver, this);
+    }
+
+    public void preencherFormulario(String nome, Integer ano, String situacao) {
+        nomeInput.sendKeys(nome);
+        anoInput.sendKeys(ano.toString());
+        new Select(situacaoSelect).selectByVisibleText(situacao);
+    }
+
+    public void salvar() {
+        driver.findElement(By.id("btnSalvar")).click();
+    }
+}
+```
+
+#### Exemplo de classe gerada para Cypress (Command)
+
+```javascript
+// commands.js
+Cypress.Commands.add('criarPortfolio', (nome, ano, situacao) => {
+    cy.get('[data-cy=nome]').type(nome);
+    cy.get('[data-cy=ano]').type(ano);
+    cy.get('[data-cy=situacao]').select(situacao);
+    cy.get('[data-cy=salvar]').click();
+});
+
+// portfolio.spec.js
+describe('Portfolio CRUD', () => {
+    it('deve criar um novo portfólio', () => {
+        cy.visit('/portfolios');
+        cy.criarPortfolio('Portfolio Homologação 2026', 2026, 'Em Elaboração');
+        cy.contains('Portfolio criado com sucesso').should('be.visible');
+    });
+});
+```
+
+### Fase 5.6 — Integração da Automação de Testes com o Fluxo de DDL
+- [ ] 5.6.1 Quando o DDL for processado (`ddl_to_entity`), o sistema deve monitorar quais entidades foram afetadas
+- [ ] 5.6.2 Para cada entidade alterada/criada, verificar se existem classes de automação correspondentes
+- [ ] 5.6.3 Se existirem, atualizar automaticamente as classes de automação (adicionar/remover campos, alterar tipos)
+- [ ] 5.6.4 Retornar no `DdlResponse` a lista de classes de automação que foram atualizadas
+- [ ] 5.6.5 Registrar no log do sistema as alterações realizadas nas classes de automação
+- [ ] 5.6.6 Gerar demanda (Fase 4.7) se a atualização da automação não puder ser feita automaticamente (ex: selectors complexos, lógica de negócio específica)
+
+### Fase 5.7 — Configuração das Ferramentas de Automação
+- [ ] 5.7.1 Adicionar as seguintes propriedades no `application.properties` do Servidor 1:
+
+```properties
+# Caminhos dos projetos de automação (opcional — se não configurado, não gera automação)
+automation.cucumber.path=/caminho/para/projeto-cucumber
+automation.selenium.path=/caminho/para/projeto-selenium
+automation.cypress.path=/caminho/para/projeto-cypress
+
+# Pacotes das classes geradas
+automation.cucumber.package=com.automacao.cucumber.steps
+automation.selenium.package=com.automacao.selenium.pages
+automation.cypress.supportPath=cypress/support
+automation.cypress.integrationPath=cypress/integration
+```
+
+- [ ] 5.7.2 Configurar templates personalizáveis:
+  - `automation.cucumber.template.step` — caminho do template para Steps
+  - `automation.selenium.template.page` — caminho do template para Page Objects
+  - `automation.cypress.template.command` — caminho do template para Commands
+- [ ] 5.7.3 Documentar a configuração no README.md
 
 ## 📦 Estrutura de Diretórios (após implementação)
 ```
@@ -413,11 +649,18 @@ raiz-do-repositorio/
 │       │   ├── McpDdlToEntityService.java
 │       │   ├── McpUnknownEntityService.java
 │       │   ├── McpCompileService.java
+│       │   ├── McpTestAutomationService.java
+│       │   ├── McpTestAutomationCucumber.java
+│       │   ├── McpTestAutomationSelenium.java
+│       │   ├── McpTestAutomationCypress.java
 │       │   └── dto/
 │       │       ├── DdlRequest.java
 │       │       ├── DdlResponse.java
 │       │       ├── UnknownEntityRequest.java
-│       │       └── UnknownEntityResponse.java
+│       │       ├── UnknownEntityResponse.java
+│       │       ├── TestAutomationRequest.java
+│       │       ├── TestAutomationResponse.java
+│       │       └── AutomationClassInfo.java
 │       └── resources/
 │           └── application.properties
 │
