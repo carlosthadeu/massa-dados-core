@@ -7,8 +7,6 @@
  *
  * @module index
  */
-import * as fs from 'fs';
-import * as path from 'path';
 import {
   gerarCabecalho,
   gerarMeses,
@@ -162,44 +160,4 @@ export function gerarScript(params: GeradorParams): string {
   script += 'END CATCH;\n';
 
   return script;
-}
-
-/**
- * Execução via linha de comando.
- *
- * Uso:
- * ```
- * node dist/index.js <destino> [quantidadeAcoes]
- * ```
- *
- * Exemplo:
- * ```
- * node dist/index.js 78 10
- * ```
- */
-const args = process.argv.slice(2);
-if (args.length > 0) {
-  const destino = parseInt(args[0], 10);
-  const quantidadeAcoes = args[1] ? parseInt(args[1], 10) : 5;
-
-  if (isNaN(destino)) {
-    console.error('Erro: O parâmetro <destino> deve ser um número.');
-    console.log('Uso: node dist/index.js <destino> [quantidadeAcoes]');
-    process.exit(1);
-  }
-
-  const scriptResult = gerarScript({ destino, quantidadeAcoes });
-
-  const outputDir = path.resolve(process.cwd(), 'output');
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  const outputFilePath = path.join(outputDir, `massa_dados_ptf_${destino}.sql`);
-  fs.writeFileSync(outputFilePath, scriptResult, 'utf-8');
-
-  console.log(`Script SQL gerado com sucesso em: ${outputFilePath}`);
-} else {
-  console.log('Uso: node dist/index.js <destino> [quantidadeAcoes]');
-  console.log('Exemplo: node dist/index.js 78 10');
 }

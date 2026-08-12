@@ -506,4 +506,26 @@ describe('gerarScript()', () => {
     const script = gerarScript({ destino: 78, quantidadeAcoes: 1 });
     expect(script).toContain('Carga de massa de dados realizada com sucesso.');
   });
+
+  /**
+   * Deve respeitar valoresFixos para cdUnd.
+   *
+   * @returns void
+   */
+  it('deve respeitar valoresFixos para cdUnd', () => {
+    const script = gerarScript({ destino: 78, quantidadeAcoes: 1, valoresFixos: { cdUnd: 955 } });
+    expect(script).toContain('955');
+  });
+
+  /**
+   * Deve gerar script sem ações quando quantidadeAcoes = 0.
+   *
+   * @returns void
+   */
+  it('deve gerar script sem ações quando quantidadeAcoes = 0', () => {
+    const script = gerarScript({ destino: 78, quantidadeAcoes: 0 });
+    expect(script).toContain('BEGIN TRANSACTION');
+    expect(script).toContain('COMMIT TRANSACTION');
+    expect(script).not.toContain('INSERT INTO [dbo].[T696ACES]');
+  });
 });

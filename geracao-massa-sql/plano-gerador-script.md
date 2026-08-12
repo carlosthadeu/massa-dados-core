@@ -198,6 +198,25 @@ export function gerarInsertAcao(
 }
 ```
 
+1. **Criar a estrutura de pastas** para os templates:
+   - `geracao-massa-sql/gerador/src/templates/`
+   - `geracao-massa-sql/gerador/src/utils/`
+2. **Criar o arquivo `src/templates/acao.ts`** com a função `gerarInsertAcao(destino, numeroAcao, valoresFixos?)` que retorna o SQL de `INSERT` para a tabela `T696ACES`.
+3. **Criar o arquivo `src/templates/etapa.ts`** com a função `gerarInsertEtapa(destino, numeroAcao, numeroEtapa, valoresFixos?, anoRealizacao?)` que retorna o SQL de `INSERT` para a tabela `T696ETAC`.
+4. **Criar o arquivo `src/templates/entrega.ts`** com a função `gerarInsertEntrega(destino, numeroAcao, numeroEtapa, numeroEntrega, mmEnt, pcPljEnt, valoresFixos?)` que retorna o SQL de `INSERT` para a tabela `T696ENAC`.
+5. **Criar o arquivo `src/utils/sql.ts`** com as funções auxiliares:
+   - `gerarCabecalho(destino)`
+   - `gerarLoremIpsum()`
+   - `gerarMeses(quantidade)`
+   - `gerarPercentuais(quantidade)`
+6. **Implementar a função `gerarLoremIpsum()`** que gera dois parágrafos de aproximadamente 50 caracteres cada, usando palavras aleatórias.
+7. **Implementar a função `gerarMeses(quantidade)`** que retorna um array de meses (1-12) respeitando a regra de intervalo máximo de 6 meses entre o primeiro e o último mês.
+8. **Implementar a função `gerarPercentuais(quantidade)`** que retorna um array de percentuais (0-100) cuja soma seja exatamente 100, com ajuste do último valor.
+9. **Testar cada função isoladamente** usando Vitest, criando testes em `tests/` espelhando a estrutura de `src/`.
+10. **Compilar o TypeScript** com `npx tsc` para verificar erros de sintaxe.
+11. **Executar um teste manual** chamando as funções a partir de um script temporário para verificar se os SQLs gerados estão corretos.
+12. **Documentar as funções** com JSDoc conforme as regras do projeto.
+
 ### 4. Funções Utilitárias
 
 Crie `src/utils/sql.ts` com funções para montar as partes do script:
