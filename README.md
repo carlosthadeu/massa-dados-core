@@ -3,7 +3,7 @@
 > Sistema de dois servidores MCP (Model Context Protocol) para geração de massa de dados a partir de scripts DDL e consultas em linguagem natural.
 
 [![Versão](https://img.shields.io/badge/version-1.0.0-blue)]()
-[![Java](https://img.shields.io/badge/Java-21-orange)]()
+[![Java](https://img.shields.io/badge/Java-25-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ---
@@ -31,7 +31,7 @@ Dois servidores MCP que trabalham em conjunto:
 
 ### Pré-requisitos
 
-- Java 21 (JDK)
+- Java 25 (JDK, latest LTS)
 - Apache Maven 3.9+
 - VS Code com extensões Java e Spring Boot
 

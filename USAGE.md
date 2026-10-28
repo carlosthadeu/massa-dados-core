@@ -277,7 +277,7 @@ Retorna detalhes completos de uma demanda específica.
 
 ### Servidor não inicia
 
-1. Verificar se Java 21 está instalado: `java --version`
+1. Verificar se Java 25 (LTS) está instalado: `java --version`
 2. Verificar se Maven está instalado: `mvn --version`
 3. Verificar se as portas 8081 e 8082 estão livres
 4. Verificar se os caminhos no `application.properties` existem
