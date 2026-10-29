@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "docs": "typedoc",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:integration": "node tests/integration/require-test-database.cjs && jest --runInBand tests/integration"
   },
@@ -31,6 +32,7 @@
     "jest": "^30.5.2",
     "prettier": "^3.9.10",
     "ts-jest": "^29.4.15",
+    "typedoc": "0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1"
   }

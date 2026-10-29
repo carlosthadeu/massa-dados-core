@@ -34,14 +34,116 @@ tenha permissão para criar tabelas no schema `adm`.
 
 ## Fase 1: inferir e gerar um template
 
-A CLI entende os seis CSVs concatenados no exemplo da análise da diretoria
-(portfólio, ações, etapas, vínculos, domínios e entregas), inclusive campos de
-histórico com várias linhas. As IDs originais são usadas apenas para remapear
-relacionamentos no script; novas IDs são obtidas com `INSERT ... RETURNING`.
+A CLI recebe um arquivo que segue o template:
+
+````markdown
+# [Título do Conjunto de Dados / Cenário]
+
+## [Nome da Entidade 1 / Tabela]
+
+### DDL
+
+```sql
+-- DDL de criação e constraints da tabela
+CREATE TABLE NOME_TABELA (
+    -- Definição de colunas e constraints
+);
+```
+
+### CSV
+
+```plaintext
+"CAMPO_1","CAMPO_2","CAMPO_N"
+-- linhas de dados
+```
+
+---
+
+## [Nome da Entidade 2 / Tabela]
+
+### DDL
+
+```sql
+-- DDL de criação e constraints da tabela
+CREATE TABLE NOME_TABELA (
+    -- Definição de colunas e constraints
+);
+```
+
+### CSV
+
+```plaintext
+"CAMPO_1","CAMPO_2","CAMPO_N"
+-- linhas de dados
+```
+
+---
+
+## [Nome da Entidade N / Tabela]
+
+### DDL
+
+```sql
+-- DDL de criação e constraints da tabela
+CREATE TABLE NOME_TABELA (
+    -- Definição de colunas e constraints
+);
+```
+
+### CSV
+
+```plaintext
+"CAMPO_1","CAMPO_2","CAMPO_N"
+-- linhas de dados
+```
+````
+
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b'}}}%%
+graph LR
+    DOC["<b>Conjunto de Dados</b><br/><i>(Análise Diretoria)</i>"]
+
+    %% Portfolio
+    DOC --> S1["<b>Portfolio</b>"]
+    S1 --> S1_D["DDL"] --> S1_D_C["Bloco SQL"]
+    S1 --> S1_C["CSV"] --> S1_C_C["Bloco Plaintext"]
+
+    %% Ação Estratégica
+    DOC --> S2["<b>Ação Estratégica</b>"]
+    S2 --> S2_D["DDL"] --> S2_D_C["Bloco SQL"]
+    S2 --> S2_C["CSV"] --> S2_C_C["Bloco Plaintext"]
+
+    %% Etapas
+    DOC --> S3["<b>Etapas da Ação Estratégica</b>"]
+    S3 --> S3_D["DDL"] --> S3_D_C["Bloco SQL"]
+    S3 --> S3_C["CSV"] --> S3_C_C["Bloco Plaintext"]
+
+    %% Vinculação
+    DOC --> S4["<b>Vinculação Orientação</b>"]
+    S4 --> S4_D["DDL"] --> S4_D_C["Bloco SQL"]
+    S4 --> S4_C["CSV"] --> S4_C_C["Bloco Plaintext"]
+
+    %% Domínio
+    DOC --> S5["<b>Domínio Ação Estratégica</b>"]
+    S5 --> S5_D["DDL"] --> S5_D_C["Bloco SQL"]
+    S5 --> S5_C["CSV"] --> S5_C_C["Bloco Plaintext"]
+
+    %% Entrega
+    DOC --> S6["<b>Entrega Etapas</b>"]
+    S6 --> S6_D["DDL"] --> S6_D_C["Bloco SQL"]
+    S6 --> S6_C["CSV"] --> S6_C_C["Bloco Plaintext"]
+
+    %% APID
+    DOC --> S7["<b>APID</b>"]
+    S7 --> S7_D["DDL"] --> S7_D_C["Bloco SQL"]
+    S7 --> S7_C["CSV"] --> S7_C_C["Bloco Plaintext"]
+    
+```
 
 ```powershell
 npm run build
-npm start -- --csv "project-docs/cvs-exemplo/Portfolio analise diretoria.txt" --author "Seu nome" --generate
+npm start -- --csv "project-docs/cvs-exemplo/Portfolio analise diretoria.md" --author "Seu nome" --generate
 ```
 
 O template e os exemplos são salvos em `adm.model_template` e
@@ -119,7 +221,7 @@ etapa “próximo ano” usa ano de realização +1; a etapa “atrasada” usa 
 As flags são independentes e podem ser combinadas.
 
 O exemplo [`exemplo-instrucao.txt`](./project-docs/exemplo-instrucao.txt) usa o
-CSV [`Portfolio analise diretoria.txt`](./project-docs/cvs-exemplo/Portfolio%20analise%20diretoria.txt).
+CSV descrito em [`analise-diretoria-csv.md`](./project-docs/cvs-exemplo/analise-diretoria-csv.md).
 O SQL resultante é salvo em `output/` por padrão e deve ser revisado antes de
 aplicação.
 
